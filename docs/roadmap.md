@@ -50,7 +50,7 @@ Completed highlights:
 - Friendly no-games empty state.
 - Backup history based on cloud `versions/` folder.
 - Safe retention for managed timestamped version backups.
-- Config corruption backup/recovery.
+- Config corruption rename/recovery to `config.corrupt.TIMESTAMP.json` with a fresh clean config.
 - More defensive rclone execution and cancellation handling.
 - Windows publish script.
 - GitHub Actions build + publish validation.
@@ -64,11 +64,11 @@ Potential tasks:
 
 - Add installer or MSIX packaging.
 - Add GitHub Releases artifact upload.
-- Add optional launcher process-name override for games launched by Steam/Epic/etc.
+- Add optional launcher process-name override for games launched by Steam/Epic/etc.; current docs recommend selecting the actual game executable instead of the launcher where possible.
 - Allow restoring from a selected versioned backup, not only `latest/`.
 - Add richer conflict detection and comparison UI.
 - Add settings screen for global defaults.
-- Consider system tray/start-minimized support after the shutdown/cancellation behavior has more real-world testing.
+- Consider system tray/start-minimized support after the shutdown/cancellation behavior, pending auto-backup cancellation, and close-backup cancellation have more real-world testing.
 - Add automated tests around path validation, retention selection, config corruption handling, and rclone argument building.
 
 Status: not started.

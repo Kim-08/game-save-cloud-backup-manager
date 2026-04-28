@@ -15,6 +15,7 @@ public sealed class GameMonitorService : IDisposable
     private readonly ConcurrentDictionary<Guid, MonitorEntry> _entries = new();
     private CancellationTokenSource? _monitorCts;
     private Task? _monitorTask;
+    private volatile bool _isStopping;
 
     public event EventHandler<GameMonitorStateChangedEventArgs>? StateChanged;
 
@@ -32,6 +33,8 @@ public sealed class GameMonitorService : IDisposable
             return;
         }
 
+        _isStopping = false;
+        _monitorCts?.Dispose();
         _monitorCts = new CancellationTokenSource();
         _monitorTask = Task.Run(() => MonitorLoopAsync(_monitorCts.Token));
         _loggingService.Info("Game monitor started");
@@ -44,7 +47,7 @@ public sealed class GameMonitorService : IDisposable
         {
             if (_entries.TryRemove(staleId, out var removed))
             {
-                removed.RunningBackupCts?.Cancel();
+                CancelEntryWork(removed);
                 _loggingService.Info($"Game monitor removed game: {removed.Game.Name}");
             }
         }
@@ -69,10 +72,12 @@ public sealed class GameMonitorService : IDisposable
 
     public void Stop()
     {
+        _isStopping = true;
         _monitorCts?.Cancel();
+
         foreach (var entry in _entries.Values)
         {
-            entry.RunningBackupCts?.Cancel();
+            CancelEntryWork(entry);
         }
 
         try
@@ -134,48 +139,82 @@ public sealed class GameMonitorService : IDisposable
 
     private Task HandleGameStartedAsync(MonitorEntry entry, CancellationToken cancellationToken)
     {
+        CancellationTokenSource runningBackupCts;
         lock (entry.SyncRoot)
         {
             entry.IsRunning = true;
             entry.LastStatusMessage = "Running";
             entry.RunningBackupCts?.Cancel();
+            entry.PendingCloseBackupCts?.Cancel();
             entry.RunningBackupCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            runningBackupCts = entry.RunningBackupCts;
         }
 
         _loggingService.Info($"Game started: {entry.Game.Name}");
         ApplyStateToGame(entry, "Running");
-        _ = Task.Run(() => RunningAutoBackupLoopAsync(entry, entry.RunningBackupCts.Token), CancellationToken.None);
+        _ = Task.Run(() => RunningAutoBackupLoopAsync(entry, runningBackupCts.Token), CancellationToken.None);
         return Task.CompletedTask;
     }
 
     private void HandleGameClosed(MonitorEntry entry)
     {
+        CancellationToken monitorToken;
         lock (entry.SyncRoot)
         {
             entry.IsRunning = false;
             entry.LastStatusMessage = "Not Running";
             entry.RunningBackupCts?.Cancel();
             entry.RunningBackupCts = null;
+            entry.PendingCloseBackupCts?.Cancel();
+            entry.PendingCloseBackupCts = null;
+            monitorToken = _monitorCts?.Token ?? CancellationToken.None;
         }
 
         _loggingService.Info($"Game closed: {entry.Game.Name}");
         ApplyStateToGame(entry, "Not Running");
 
-        if (entry.Game.BackupOnClose)
+        if (!entry.Game.BackupOnClose || _isStopping || monitorToken.IsCancellationRequested)
         {
-            var shutdownToken = _monitorCts?.Token ?? CancellationToken.None;
-            _ = Task.Run(async () =>
+            return;
+        }
+
+        var closeBackupCts = CancellationTokenSource.CreateLinkedTokenSource(monitorToken);
+        lock (entry.SyncRoot)
+        {
+            entry.PendingCloseBackupCts = closeBackupCts;
+        }
+
+        _ = Task.Run(() => RunCloseBackupAfterDelayAsync(entry, closeBackupCts), CancellationToken.None);
+    }
+
+    private async Task RunCloseBackupAfterDelayAsync(MonitorEntry entry, CancellationTokenSource closeBackupCts)
+    {
+        try
+        {
+            await Task.Delay(CloseBackupDelay, closeBackupCts.Token);
+            if (_isStopping || closeBackupCts.Token.IsCancellationRequested)
             {
-                try
+                _loggingService.Info($"close backup skipped because monitoring is stopped: {entry.Game.Name}");
+                return;
+            }
+
+            await RunBackupIfAllowedAsync(entry, "close", closeBackupCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            _loggingService.Info($"close backup canceled: {entry.Game.Name}");
+        }
+        finally
+        {
+            lock (entry.SyncRoot)
+            {
+                if (ReferenceEquals(entry.PendingCloseBackupCts, closeBackupCts))
                 {
-                    await Task.Delay(CloseBackupDelay, shutdownToken);
-                    await RunBackupIfAllowedAsync(entry, "close", shutdownToken);
+                    entry.PendingCloseBackupCts = null;
                 }
-                catch (OperationCanceledException)
-                {
-                    _loggingService.Info($"close backup canceled: {entry.Game.Name}");
-                }
-            }, CancellationToken.None);
+            }
+
+            closeBackupCts.Dispose();
         }
     }
 
@@ -212,6 +251,14 @@ public sealed class GameMonitorService : IDisposable
 
     private async Task RunBackupIfAllowedAsync(MonitorEntry entry, string backupType, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (_isStopping && string.Equals(backupType, "close", StringComparison.OrdinalIgnoreCase))
+        {
+            _loggingService.Info($"close backup skipped because monitoring is stopped: {entry.Game.Name}");
+            return;
+        }
+
         lock (entry.SyncRoot)
         {
             if (entry.IsBackupRunning)
@@ -318,6 +365,13 @@ public sealed class GameMonitorService : IDisposable
         entry.LastStatusMessage = status;
     }
 
+    private static void CancelEntryWork(MonitorEntry entry)
+    {
+        entry.RunningBackupCts?.Cancel();
+        entry.PendingCloseBackupCts?.Cancel();
+        entry.PendingCloseBackupCts = null;
+    }
+
     private void ApplyStateToGame(MonitorEntry entry, string? status = null)
     {
         var newStatus = status ?? (entry.IsRunning ? "Running" : entry.LastStatusMessage);
@@ -353,6 +407,7 @@ public sealed class GameMonitorService : IDisposable
         foreach (var entry in _entries.Values)
         {
             entry.RunningBackupCts?.Dispose();
+            entry.PendingCloseBackupCts?.Dispose();
         }
     }
 
@@ -374,6 +429,7 @@ public sealed class GameMonitorService : IDisposable
         public DateTimeOffset? LastEmittedLastAutoBackupTime { get; set; }
         public string? LastEmittedIntervalDisplay { get; set; }
         public CancellationTokenSource? RunningBackupCts { get; set; }
+        public CancellationTokenSource? PendingCloseBackupCts { get; set; }
     }
 }
 

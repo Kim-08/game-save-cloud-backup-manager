@@ -32,8 +32,9 @@ Game Save Cloud Backup Manager is a Windows desktop app that lets users add game
 - Phase 4 added `BackupService`. Backup uses `rclone copy` to both `latest/` and `versions/<TIMESTAMP>/`, then uploads `metadata.json` with `rclone copyto`. Restore reads metadata where available, requires UI confirmation, creates a local safety backup, then restores cloud `latest/` with `rclone copy`.
 - Phase 4 also implemented startup cloud restore prompts. Games with `startupRestorePrompt` enabled are checked once per app session by reading cloud `metadata.json`; if cloud metadata is newer than local save modified time, or local saves are missing, the app prompts Restore from Cloud / Keep Local Save / Ask Later.
 - Phase 5 added `GameMonitorService` for process monitoring and automatic backups. It derives the process name from `exePath`, checks every few seconds, updates runtime UI status, waits about one minute after game start before first auto backup, backs up every configured interval, and runs a final close backup after about five seconds when `backupOnClose` is enabled. It prevents overlapping backups per game.
-- Phase 6 added polish/reliability/packaging: improved logs viewer, folder-opening buttons, rclone setup help, better Add/Edit validation, friendly empty state, backup history from cloud `versions/`, safe managed-version retention, config corruption backup, better logging resilience, rclone cancellation handling, Windows publish script, CI publish validation, and documentation cleanup.
+- Phase 6 added polish/reliability/packaging: improved logs viewer, folder-opening buttons, rclone setup help, better Add/Edit validation, friendly empty state, backup history from cloud `versions/`, safe managed-version retention, config corruption recovery, better logging resilience, rclone cancellation handling, Windows publish script, CI publish validation, and documentation cleanup.
 - The MVP stabilization pass changed rclone execution from shell-style quoted command strings to `ProcessStartInfo.ArgumentList`, added safe relative cloud-path validation, blocked restore when the configured game process appears to be running, tail-limited log reads, and made config writes use temporary files plus overwrite moves.
+- The Phase 6 reliability pass renamed invalid `config.json` files to `config.corrupt.TIMESTAMP.json`, creates a clean replacement config, shows "Please close the game before restoring." when restore is blocked by a running configured process, and makes shutdown cancel pending auto-backup/close-backup delays without starting a final close backup after monitoring stops.
 
 ## MVP completion status
 
@@ -56,7 +57,7 @@ Completion checklist:
 ## Open questions / next work
 
 - Should rclone be bundled, downloaded, or remain user-provided? Current assumption: user-provided rclone in PATH.
-- How should game process detection handle launchers that spawn another process? Likely next step: optional process-name override.
+- How should game process detection handle launchers that spawn another process? Current guidance says to select the actual game executable when possible; likely next step is an optional process-name override.
 - Should restore support choosing an older versioned backup, not only `latest/`?
 - How should conflicts be displayed when local and cloud metadata disagree?
 - Should version retention have a dedicated global setting in addition to per-game `MaxVersionBackups`?

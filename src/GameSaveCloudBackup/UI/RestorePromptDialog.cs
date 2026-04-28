@@ -41,7 +41,9 @@ public sealed class RestorePromptDialog : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
 
-        var localDateText = localSaveDate.HasValue ? localSaveDate.Value.LocalDateTime.ToString("f") : "Local save folder missing or unavailable";
+        var localDateText = localSaveDate.HasValue
+            ? localSaveDate.Value.LocalDateTime.ToString("f")
+            : "Local save folder missing or unavailable";
         var message =
             $"Cloud backup found for {game.Name}.\n\n" +
             $"Cloud backup date: {metadata.LastBackupTime.LocalDateTime:f}\n" +

@@ -54,9 +54,24 @@ public sealed class BackupHistoryDialog : Form
         _historyGrid.ReadOnly = true;
         _historyGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _historyGrid.AutoGenerateColumns = false;
-        _historyGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Version", DataPropertyName = nameof(BackupHistoryRow.Name), Width = 160 });
-        _historyGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Created", DataPropertyName = nameof(BackupHistoryRow.CreatedAt), Width = 200 });
-        _historyGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Remote Path", DataPropertyName = nameof(BackupHistoryRow.RemotePath), AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        _historyGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "Version",
+            DataPropertyName = nameof(BackupHistoryRow.Name),
+            Width = 160
+        });
+        _historyGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "Created",
+            DataPropertyName = nameof(BackupHistoryRow.CreatedAt),
+            Width = 200
+        });
+        _historyGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "Remote Path",
+            DataPropertyName = nameof(BackupHistoryRow.RemotePath),
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill
+        });
         root.Controls.Add(_historyGrid, 0, 1);
 
         var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill };
@@ -94,7 +109,12 @@ public sealed class BackupHistoryDialog : Form
         catch (Exception ex)
         {
             _statusLabel.Text = "Could not load backup history.";
-            MessageBox.Show(this, $"Could not load backup history: {ex.Message}", "Backup History", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(
+                this,
+                $"Could not load backup history: {ex.Message}",
+                "Backup History",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
         }
         finally
         {

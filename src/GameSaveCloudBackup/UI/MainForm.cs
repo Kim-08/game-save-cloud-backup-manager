@@ -26,7 +26,13 @@ public sealed class MainForm : Form
     private readonly HashSet<Guid> _startupRestorePromptedGameIds = [];
     private IReadOnlyList<string> _rcloneRemotes = [];
 
-    public MainForm(ConfigService configService, LoggingService loggingService, RcloneService rcloneService, BackupService backupService, GameMonitorService gameMonitorService, AppConfig appConfig)
+    public MainForm(
+        ConfigService configService,
+        LoggingService loggingService,
+        RcloneService rcloneService,
+        BackupService backupService,
+        GameMonitorService gameMonitorService,
+        AppConfig appConfig)
     {
         _configService = configService;
         _loggingService = loggingService;
@@ -137,7 +143,9 @@ public sealed class MainForm : Form
         ConfigureGamesGrid();
 
         var gridHost = new Panel { Dock = DockStyle.Fill };
-        _emptyStateLabel.Text = "No games added yet. Click Add Game to pick a game EXE, save folder, rclone remote, and cloud backup folder. A small ritual, then backups.";
+        _emptyStateLabel.Text =
+            "No games added yet. Click Add Game to pick a game EXE, save folder, rclone remote, " +
+            "and cloud backup folder. A small ritual, then backups.";
         _emptyStateLabel.Dock = DockStyle.Fill;
         _emptyStateLabel.TextAlign = ContentAlignment.MiddleCenter;
         _emptyStateLabel.Font = new Font(Font.FontFamily, 11, FontStyle.Italic);
@@ -198,20 +206,98 @@ public sealed class MainForm : Form
         _gamesGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _gamesGrid.MultiSelect = false;
         _gamesGrid.AutoGenerateColumns = false;
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Name", DataPropertyName = nameof(GameConfig.Name), Width = 140 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Monitor", DataPropertyName = nameof(GameConfig.MonitorStatus), Width = 145 });
-        _gamesGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "Auto", DataPropertyName = nameof(GameConfig.AutoBackup), Width = 55 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Interval", DataPropertyName = nameof(GameConfig.AutoBackupIntervalDisplay), Width = 70 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Versions", DataPropertyName = nameof(GameConfig.MaxVersionBackups), Width = 70 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Backing Up", DataPropertyName = nameof(GameConfig.IsBackupRunning), Width = 85 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Last Auto Backup", DataPropertyName = nameof(GameConfig.LastAutoBackupTime), Width = 155 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Last Backup", DataPropertyName = nameof(GameConfig.LastBackupTime), Width = 155 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Remote", DataPropertyName = nameof(GameConfig.RcloneRemote), Width = 90 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Cloud Folder", DataPropertyName = nameof(GameConfig.CloudPath), Width = 170 });
-        _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = BackupColumnName, HeaderText = "Backup", Text = "Backup Now", UseColumnTextForButtonValue = true, Width = 105 });
-        _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = RestoreColumnName, HeaderText = "Restore", Text = "Restore", UseColumnTextForButtonValue = true, Width = 90 });
-        _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = HistoryColumnName, HeaderText = "History", Text = "History", UseColumnTextForButtonValue = true, Width = 80 });
-        _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = OpenSaveFolderColumnName, HeaderText = "Folder", Text = "Open Save", UseColumnTextForButtonValue = true, Width = 105 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "Name",
+            DataPropertyName = nameof(GameConfig.Name),
+            Width = 140
+        });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "Monitor",
+            DataPropertyName = nameof(GameConfig.MonitorStatus),
+            Width = 145
+        });
+        _gamesGrid.Columns.Add(new DataGridViewCheckBoxColumn
+        {
+            HeaderText = "Auto",
+            DataPropertyName = nameof(GameConfig.AutoBackup),
+            Width = 55
+        });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "Interval",
+            DataPropertyName = nameof(GameConfig.AutoBackupIntervalDisplay),
+            Width = 70
+        });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "Versions",
+            DataPropertyName = nameof(GameConfig.MaxVersionBackups),
+            Width = 70
+        });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "Backing Up",
+            DataPropertyName = nameof(GameConfig.IsBackupRunning),
+            Width = 85
+        });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "Last Auto Backup",
+            DataPropertyName = nameof(GameConfig.LastAutoBackupTime),
+            Width = 155
+        });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "Last Backup",
+            DataPropertyName = nameof(GameConfig.LastBackupTime),
+            Width = 155
+        });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "Remote",
+            DataPropertyName = nameof(GameConfig.RcloneRemote),
+            Width = 90
+        });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "Cloud Folder",
+            DataPropertyName = nameof(GameConfig.CloudPath),
+            Width = 170
+        });
+        _gamesGrid.Columns.Add(new DataGridViewButtonColumn
+        {
+            Name = BackupColumnName,
+            HeaderText = "Backup",
+            Text = "Backup Now",
+            UseColumnTextForButtonValue = true,
+            Width = 105
+        });
+        _gamesGrid.Columns.Add(new DataGridViewButtonColumn
+        {
+            Name = RestoreColumnName,
+            HeaderText = "Restore",
+            Text = "Restore",
+            UseColumnTextForButtonValue = true,
+            Width = 90
+        });
+        _gamesGrid.Columns.Add(new DataGridViewButtonColumn
+        {
+            Name = HistoryColumnName,
+            HeaderText = "History",
+            Text = "History",
+            UseColumnTextForButtonValue = true,
+            Width = 80
+        });
+        _gamesGrid.Columns.Add(new DataGridViewButtonColumn
+        {
+            Name = OpenSaveFolderColumnName,
+            HeaderText = "Folder",
+            Text = "Open Save",
+            UseColumnTextForButtonValue = true,
+            Width = 105
+        });
         _gamesGrid.CellContentClick += GamesGridCellContentClick;
         _gamesGrid.DoubleClick += EditSelectedGame;
     }
@@ -224,7 +310,9 @@ public sealed class MainForm : Form
         if (string.IsNullOrWhiteSpace(version))
         {
             _rcloneRemotes = [];
-            _rcloneStatusLabel.Text = "Missing: rclone is not installed or is not available in PATH. Install rclone, run `rclone config`, then refresh.";
+            _rcloneStatusLabel.Text =
+                "Missing: rclone is not installed or is not available in PATH. " +
+                "Install rclone, run `rclone config`, then refresh.";
             RefreshLogs();
             return;
         }
@@ -307,7 +395,12 @@ public sealed class MainForm : Form
             try
             {
                 var result = await _backupService.RestoreFromCloudAsync(game, _appCts.Token);
-                MessageBox.Show(this, result.Message, "Startup Restore", MessageBoxButtons.OK, result.Succeeded ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                MessageBox.Show(
+                    this,
+                    result.Message,
+                    "Startup Restore",
+                    MessageBoxButtons.OK,
+                    result.Succeeded ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
             }
             finally
             {
@@ -372,7 +465,12 @@ public sealed class MainForm : Form
             return;
         }
 
-        var result = MessageBox.Show(this, $"Remove '{selected.Name}' from the game list? This does not delete local saves or cloud backups.", "Remove Game", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+        var result = MessageBox.Show(
+            this,
+            $"Remove '{selected.Name}' from the game list? This does not delete local saves or cloud backups.",
+            "Remove Game",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
         if (result != DialogResult.Yes)
         {
             return;
@@ -432,7 +530,12 @@ public sealed class MainForm : Form
                 SaveConfigWithDialog();
             }
 
-            MessageBox.Show(this, result.Message, "Backup Now", MessageBoxButtons.OK, result.Succeeded ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            MessageBox.Show(
+                this,
+                result.Message,
+                "Backup Now",
+                MessageBoxButtons.OK,
+                result.Succeeded ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         finally
         {
@@ -445,6 +548,19 @@ public sealed class MainForm : Form
 
     private async Task RestoreSelectedGameAsync(GameConfig game)
     {
+        var closedCheck = _backupService.VerifyGameIsClosedForRestore(game);
+        if (!closedCheck.Succeeded)
+        {
+            MessageBox.Show(
+                this,
+                closedCheck.Message,
+                "Restore from Cloud",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            RefreshLogs();
+            return;
+        }
+
         UseWaitCursor = true;
         BackupMetadata? metadata;
         try
@@ -457,12 +573,17 @@ public sealed class MainForm : Form
         }
 
         var metadataSummary = metadata is null
-            ? "Cloud metadata could not be read. You can still attempt restore if the latest backup exists. This is the part where we squint at the abyss."
-            : $"Cloud backup date: {metadata.LastBackupTime.LocalDateTime}\nSource device: {metadata.SourceDevice}\nBackup type: {metadata.BackupType}";
+            ? "Cloud metadata could not be read. You can still attempt restore if the latest backup exists. " +
+                "This is the part where we squint at the abyss."
+            : $"Cloud backup date: {metadata.LastBackupTime.LocalDateTime}\n" +
+                $"Source device: {metadata.SourceDevice}\n" +
+                $"Backup type: {metadata.BackupType}";
 
         var confirm = MessageBox.Show(
             this,
-            $"Restore '{game.Name}' from cloud latest?\n\n{metadataSummary}\n\nBefore restoring, the app will create a local safety backup of the current save folder. Restore may overwrite local save files.",
+            $"Restore '{game.Name}' from cloud latest?\n\n{metadataSummary}\n\n" +
+                "Before restoring, the app will create a local safety backup of the current save folder. " +
+                "Restore may overwrite local save files.",
             "Confirm Restore from Cloud",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning);
@@ -477,7 +598,12 @@ public sealed class MainForm : Form
         try
         {
             var result = await _backupService.RestoreFromCloudAsync(game, _appCts.Token);
-            MessageBox.Show(this, result.Message, "Restore from Cloud", MessageBoxButtons.OK, result.Succeeded ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            MessageBox.Show(
+                this,
+                result.Message,
+                "Restore from Cloud",
+                MessageBoxButtons.OK,
+                result.Succeeded ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         finally
         {
@@ -515,7 +641,12 @@ public sealed class MainForm : Form
             "4. Use only the remote name in this app, like `gdrive`.\n\n" +
             "The README has the longer setup notes and examples.";
 
-        var result = MessageBox.Show(this, message + "\n\nOpen rclone downloads page?", "Rclone Setup Help", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+        var result = MessageBox.Show(
+            this,
+            message + "\n\nOpen rclone downloads page?",
+            "Rclone Setup Help",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Information);
         if (result == DialogResult.Yes)
         {
             OpenUrl("https://rclone.org/downloads/");

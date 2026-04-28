@@ -26,8 +26,8 @@ public sealed class AddEditGameForm : Form
         Text = game is null ? "Add Game" : "Edit Game";
         StartPosition = FormStartPosition.CenterParent;
         Width = 800;
-        Height = 530;
-        MinimumSize = new Size(720, 500);
+        Height = 560;
+        MinimumSize = new Size(720, 520);
         BuildLayout();
         LoadRemotes(remotes ?? []);
         LoadGame();
@@ -75,7 +75,10 @@ public sealed class AddEditGameForm : Form
 
         var helpText = new Label
         {
-            Text = "Tip: Remote should be just the rclone name, like 'gdrive'. Cloud folder should be a folder path, like 'GameSaveBackups/Stardew Valley'. Set versions to 0 to keep all versioned backups.",
+            Text = "Tip: Select the actual game executable when possible. " +
+                "Steam, Epic, and other launchers often spawn a separate game process, so choosing the real game .exe " +
+                "is more reliable for monitoring and restore safety. Remote should be just the rclone name, like 'gdrive'. " +
+                "Set versions to 0 to keep all versioned backups.",
             Dock = DockStyle.Fill,
             AutoSize = false,
             ForeColor = SystemColors.GrayText
@@ -152,13 +155,23 @@ public sealed class AddEditGameForm : Form
         var remoteName = _rcloneRemoteComboBox.Text.Trim().TrimEnd(':');
         if (string.IsNullOrWhiteSpace(remoteName))
         {
-            MessageBox.Show(this, "Enter or select an rclone remote first.", "Rclone Remote", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(
+                this,
+                "Enter or select an rclone remote first.",
+                "Rclone Remote",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
             return;
         }
 
         if (remoteName.Contains(':'))
         {
-            MessageBox.Show(this, "Use only the remote name here, for example 'gdrive'. Put folders in Cloud Backup Folder.", "Rclone Remote", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(
+                this,
+                "Use only the remote name here, for example 'gdrive'. Put folders in Cloud Backup Folder.",
+                "Rclone Remote",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             return;
         }
 
@@ -175,7 +188,12 @@ public sealed class AddEditGameForm : Form
             var message = ok
                 ? $"Remote '{remoteName}' is reachable. Tiny miracle, accept it."
                 : $"Remote '{remoteName}' could not be reached. Check rclone config, remote name, and cloud authentication.";
-            MessageBox.Show(this, message, "Rclone Remote Test", MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            MessageBox.Show(
+                this,
+                message,
+                "Rclone Remote Test",
+                MessageBoxButtons.OK,
+                ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         catch (Exception ex)
         {
@@ -266,7 +284,12 @@ public sealed class AddEditGameForm : Form
 
         if (errors.Count > 0)
         {
-            MessageBox.Show(this, string.Join(Environment.NewLine, errors), "Please fix these settings", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(
+                this,
+                string.Join(Environment.NewLine, errors),
+                "Please fix these settings",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             DialogResult = DialogResult.None;
             return false;
         }

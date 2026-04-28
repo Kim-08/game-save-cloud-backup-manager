@@ -22,7 +22,10 @@ public sealed class BackupService
         _loggingService = loggingService;
     }
 
-    public async Task<BackupOperationResult> BackupNowAsync(GameConfig game, string backupType, CancellationToken cancellationToken = default)
+    public async Task<BackupOperationResult> BackupNowAsync(
+        GameConfig game,
+        string backupType,
+        CancellationToken cancellationToken = default)
     {
         var operationLock = _operationLocks.GetOrAdd(game.Id, _ => new SemaphoreSlim(1, 1));
         var lockTaken = false;
@@ -124,7 +127,7 @@ public sealed class BackupService
                 return validation;
             }
 
-            var closedCheck = EnsureConfiguredGameProcessIsNotRunning(game);
+            var closedCheck = VerifyGameIsClosedForRestore(game);
             if (!closedCheck.Succeeded)
             {
                 return closedCheck;
@@ -149,7 +152,8 @@ public sealed class BackupService
                 return BackupOperationResult.Fail($"Failed to restore from cloud. {CleanError(restoreResult.StandardError)}");
             }
 
-            _loggingService.Info($"Manual restore completed: {game.Name}; source={latestRemotePath}; safetyBackup={safetyBackup.OutputPath}");
+            _loggingService.Info(
+                $"Manual restore completed: {game.Name}; source={latestRemotePath}; safetyBackup={safetyBackup.OutputPath}");
             return BackupOperationResult.Ok("Restore completed successfully.", safetyBackup.OutputPath);
         }
         catch (OperationCanceledException)
@@ -186,7 +190,8 @@ public sealed class BackupService
             if (!IsSaveFolderValid(game))
             {
                 Directory.CreateDirectory(targetDirectory);
-                _loggingService.Info($"Safety backup skipped because local save folder does not exist: {game.Name}; reservedPath={targetDirectory}");
+                _loggingService.Info(
+                    $"Safety backup skipped because local save folder does not exist: {game.Name}; reservedPath={targetDirectory}");
                 return BackupOperationResult.Ok("Local save folder did not exist, so there was nothing to safety-backup.", targetDirectory);
             }
 
@@ -206,7 +211,9 @@ public sealed class BackupService
         }
     }
 
-    public async Task<IReadOnlyList<BackupHistoryEntry>> GetBackupHistoryAsync(GameConfig game, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<BackupHistoryEntry>> GetBackupHistoryAsync(
+        GameConfig game,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(game.RcloneRemote) || string.IsNullOrWhiteSpace(game.CloudPath))
         {
@@ -217,7 +224,10 @@ public sealed class BackupService
         var versionNames = await _rcloneService.ListRemoteDirectories(versionsRemotePath, cancellationToken);
         return versionNames
             .Where(IsManagedVersionDirectory)
-            .Select(name => new BackupHistoryEntry(name, TryParseVersionTimestamp(name), _rcloneService.BuildRemotePath(game.RcloneRemote, game.CloudPath, $"versions/{name}")))
+            .Select(name => new BackupHistoryEntry(
+                name,
+                TryParseVersionTimestamp(name),
+                _rcloneService.BuildRemotePath(game.RcloneRemote, game.CloudPath, $"versions/{name}")))
             .OrderByDescending(entry => entry.CreatedAt ?? DateTimeOffset.MinValue)
             .ToList();
     }
@@ -288,7 +298,10 @@ public sealed class BackupService
         return metadataFilePath;
     }
 
-    public async Task<BackupOperationResult> UploadMetadataAsync(GameConfig game, string metadataFilePath, CancellationToken cancellationToken = default)
+    public async Task<BackupOperationResult> UploadMetadataAsync(
+        GameConfig game,
+        string metadataFilePath,
+        CancellationToken cancellationToken = default)
     {
         if (!File.Exists(metadataFilePath))
         {
@@ -342,7 +355,10 @@ public sealed class BackupService
         }
     }
 
-    private async Task<BackupOperationResult> ValidateGameForRcloneOperationAsync(GameConfig game, bool requireSaveFolder, CancellationToken cancellationToken)
+    private async Task<BackupOperationResult> ValidateGameForRcloneOperationAsync(
+        GameConfig game,
+        bool requireSaveFolder,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(game.Name))
         {
@@ -371,7 +387,8 @@ public sealed class BackupService
 
         if (!IsSafeCloudPath(game.CloudPath))
         {
-            return BackupOperationResult.Fail("Cloud backup folder must be a relative folder path and cannot contain '.' or '..' path segments.");
+            return BackupOperationResult.Fail(
+                "Cloud backup folder must be a relative folder path and cannot contain '.' or '..' path segments.");
         }
 
         if (string.IsNullOrWhiteSpace(game.SavePath))
@@ -422,7 +439,8 @@ public sealed class BackupService
             }
             else
             {
-                _loggingService.Error($"Failed to prune old versioned backup: {game.Name}; version={version.Name}; {CleanError(result.StandardError)}");
+                _loggingService.Error(
+                    $"Failed to prune old versioned backup: {game.Name}; version={version.Name}; {CleanError(result.StandardError)}");
             }
         }
     }
@@ -445,8 +463,20 @@ public sealed class BackupService
             var targetFile = Path.Combine(targetDirectory, relativePath);
             Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
 
-            await using var sourceStream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 81920, useAsync: true);
-            await using var targetStream = new FileStream(targetFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+            await using var sourceStream = new FileStream(
+                file,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete,
+                81920,
+                useAsync: true);
+            await using var targetStream = new FileStream(
+                targetFile,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                81920,
+                useAsync: true);
             await sourceStream.CopyToAsync(targetStream, cancellationToken);
         }
     }
@@ -463,16 +493,18 @@ public sealed class BackupService
             : null;
     }
 
-    private BackupOperationResult EnsureConfiguredGameProcessIsNotRunning(GameConfig game)
+    public BackupOperationResult VerifyGameIsClosedForRestore(GameConfig game)
     {
         if (string.IsNullOrWhiteSpace(game.ExePath) || !File.Exists(game.ExePath))
         {
+            _loggingService.Info($"Restore process check skipped because the game EXE path is missing or invalid: {game.Name}");
             return BackupOperationResult.Ok("No process check was possible because the game EXE path is missing or invalid.");
         }
 
         var processName = Path.GetFileNameWithoutExtension(game.ExePath);
         if (string.IsNullOrWhiteSpace(processName))
         {
+            _loggingService.Info($"Restore process check skipped because the game process name is invalid: {game.Name}");
             return BackupOperationResult.Ok("No process check was possible because the game process name is invalid.");
         }
 
@@ -480,7 +512,8 @@ public sealed class BackupService
         {
             if (Process.GetProcessesByName(processName).Any())
             {
-                return BackupOperationResult.Fail($"Restore blocked because '{game.Name}' appears to be running. Close the game before restoring saves.");
+                _loggingService.Info($"Restore blocked because configured process is running: {game.Name}; process={processName}");
+                return BackupOperationResult.Fail("Please close the game before restoring.");
             }
 
             return BackupOperationResult.Ok("Game is not running.");

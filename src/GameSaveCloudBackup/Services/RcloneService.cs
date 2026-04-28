@@ -111,7 +111,9 @@ public sealed class RcloneService
         return await RunRcloneCommandAsync(["purge", remotePath], cancellationToken);
     }
 
-    public async Task<RcloneCommandResult> RunRcloneCommandAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken = default)
+    public async Task<RcloneCommandResult> RunRcloneCommandAsync(
+        IReadOnlyList<string> arguments,
+        CancellationToken cancellationToken = default)
     {
         if (arguments.Count == 0 || arguments.Any(string.IsNullOrWhiteSpace))
         {
@@ -249,7 +251,10 @@ public sealed class RcloneService
             stderrPreview = stderrPreview[..500] + "...";
         }
 
-        var message = $"rclone command completed: rclone {result.Arguments}; exit={result.ExitCode}; durationMs={result.Duration.TotalMilliseconds:0}; stdoutBytes={result.StandardOutput.Length}; stderrBytes={result.StandardError.Length}";
+        var message =
+            $"rclone command completed: rclone {result.Arguments}; exit={result.ExitCode}; " +
+            $"durationMs={result.Duration.TotalMilliseconds:0}; stdoutBytes={result.StandardOutput.Length}; " +
+            $"stderrBytes={result.StandardError.Length}";
         if (!string.IsNullOrWhiteSpace(stderrPreview))
         {
             message += $"; stderr={stderrPreview}";

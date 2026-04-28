@@ -41,11 +41,11 @@ public sealed class ConfigService
         }
         catch (JsonException ex)
         {
-            var backupPath = BackupBadConfig();
-            _loggingService.Error($"Config was invalid JSON and has been backed up to {backupPath}. A fresh config was created.", ex);
-            var emptyConfig = new AppConfig();
-            Save(emptyConfig);
-            return emptyConfig;
+            return RecoverFromCorruptConfig(ex);
+        }
+        catch (NotSupportedException ex)
+        {
+            return RecoverFromCorruptConfig(ex);
         }
         catch (Exception ex)
         {
@@ -72,18 +72,42 @@ public sealed class ConfigService
         }
     }
 
-    private string BackupBadConfig()
+    private AppConfig RecoverFromCorruptConfig(Exception exception)
+    {
+        var corruptPath = RenameCorruptConfig();
+        var recoveryMessage = corruptPath is null
+            ? "Config file was invalid, but it could not be renamed. A new clean config.json was created."
+            : $"Config file was invalid and has been renamed to {corruptPath}. A new clean config.json was created.";
+
+        _loggingService.Error(recoveryMessage, exception);
+
+        var emptyConfig = new AppConfig();
+        Save(emptyConfig);
+        return emptyConfig;
+    }
+
+    private string? RenameCorruptConfig()
     {
         try
         {
-            var backupPath = Path.Combine(ConfigDirectory, $"config.bad.{DateTimeOffset.Now:yyyyMMdd_HHmmss_fff}.json");
-            File.Copy(ConfigFilePath, backupPath, overwrite: false);
-            return backupPath;
+            var corruptPath = CreateCorruptConfigPath();
+            File.Move(ConfigFilePath, corruptPath, overwrite: false);
+            return corruptPath;
         }
         catch (Exception ex)
         {
-            _loggingService.Error("Failed to back up corrupt config", ex);
-            return "backup failed";
+            _loggingService.Error("Failed to rename corrupt config file", ex);
+            return null;
         }
+    }
+
+    private string CreateCorruptConfigPath()
+    {
+        var timestamp = DateTimeOffset.Now.ToString("yyyyMMdd_HHmmss_fff");
+        var corruptPath = Path.Combine(ConfigDirectory, $"config.corrupt.{timestamp}.json");
+
+        return File.Exists(corruptPath)
+            ? Path.Combine(ConfigDirectory, $"config.corrupt.{timestamp}.{Guid.NewGuid():N}.json")
+            : corruptPath;
     }
 }

@@ -14,7 +14,11 @@ internal static class Program
         Application.ThreadException += (_, eventArgs) =>
         {
             loggingService.Error("Unhandled UI exception", eventArgs.Exception);
-            MessageBox.Show($"Something failed unexpectedly. Details were written to the log.\n\n{eventArgs.Exception.Message}", "Game Save Cloud Backup Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(
+                $"Something failed unexpectedly. Details were written to the log.\n\n{eventArgs.Exception.Message}",
+                "Game Save Cloud Backup Manager",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
         };
         AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>
         {

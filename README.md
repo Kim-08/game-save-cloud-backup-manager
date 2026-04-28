@@ -26,7 +26,7 @@ Completed MVP capabilities:
 - Better Add/Edit validation for EXE path, save folder, remote name, safe relative cloud folder, intervals, and retention
 - Friendly empty state when no games are configured
 - Local config at `%LOCALAPPDATA%/GameSaveCloudBackup/config.json`
-- Config corruption handling: invalid JSON is backed up as `config.bad.TIMESTAMP.json` and a fresh config is created
+- Config corruption handling: invalid JSON is renamed to `config.corrupt.TIMESTAMP.json` and a fresh config is created
 - More reliable config writes using temporary files and overwrite moves
 - Local logs at `%LOCALAPPDATA%/GameSaveCloudBackup/Logs/app.log`
 - In-app logs viewer with refresh, Open Logs Folder, and Open Config Folder buttons
@@ -42,7 +42,7 @@ Completed MVP capabilities:
 - Retention for managed timestamped version folders: keep latest `MaxVersionBackups`, or `0` to keep all
 - Metadata upload using `rclone copyto`
 - Manual Restore from Cloud using `rclone copy`
-- Restore is blocked when the configured game process appears to be running
+- Restore is blocked with "Please close the game before restoring." when the configured game process appears to be running
 - Local safety backup before restore at `%LOCALAPPDATA%/GameSaveCloudBackup/SafetyBackups/`
 - Startup cloud metadata check and restore prompt when the cloud backup appears newer
 - Game process monitoring from the configured EXE/launcher path
@@ -174,7 +174,7 @@ GameSaveBackups/Stardew Valley
 
 ## Automatic backup while a game is running
 
-The app monitors each configured game by deriving the process name from the selected EXE/launcher path. It checks every few seconds and updates the game row with:
+The app monitors each configured game by deriving the process name from the selected EXE/launcher path. Selecting the actual game executable is more reliable than selecting Steam, Epic, or another launcher executable, because launchers often spawn a separate child game process. The app checks every few seconds and updates the game row with:
 
 - Running / Not Running
 - Last auto backup time
@@ -190,6 +190,7 @@ Safety rules:
 - No backup runs if the save folder is missing.
 - No backup runs if the save folder is empty.
 - No overlapping backups or restores run for the same game.
+- Restore is blocked if the configured game process is running, with the friendly message: "Please close the game before restoring."
 - Automatic backups use `BackupService.BackupNowAsync(game, "auto")`.
 - Close backups use `BackupService.BackupNowAsync(game, "close")`.
 
@@ -279,7 +280,7 @@ rclone cat "gdrive:GameSaveBackups/Stardew Valley/metadata.json"
 2. Select the configured game in the app.
 3. Click **Restore**.
 4. Review the confirmation dialog showing metadata when available.
-5. Confirm restore.
+5. Confirm restore. If the configured game process is running, restore stops and asks you to close the game first.
 6. The app first creates a local safety backup under:
 
 ```text

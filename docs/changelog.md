@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-04-28 - Phase 6 reliability and formatting pass
+
+- Reformatted C# source for more readable multi-line method calls, grid column definitions, and long messages.
+- Changed corrupt config recovery to rename invalid `config.json` files to `config.corrupt.TIMESTAMP.json`, then create a clean replacement config with clear logging.
+- Added a restore pre-check in the UI and kept the service-level guard so restore is blocked when the configured game process is running.
+- Standardized the running-game restore message to: "Please close the game before restoring."
+- Hardened monitor shutdown so pending auto-backup and close-backup delays are canceled and final close backups do not start after monitoring stops.
+- Expanded launcher/process matching guidance in the app and docs: selecting the actual game executable is more reliable than selecting Steam/Epic/launcher executables.
+- Re-verified the project file and GitHub Actions build workflow structure.
+
 ## 2026-04-28 - MVP stabilization pass
 
 - Reworked rclone execution to use `ProcessStartInfo.ArgumentList` instead of shell-style quoted command strings, reducing path/space/quote bugs.
