@@ -8,6 +8,7 @@ Game Save Cloud Backup Manager is a Windows desktop app that lets users add game
 
 - Build a Windows desktop app first.
 - Initial MVP target is C# with WPF or WinForms.
+- Phase 1 selected WinForms for the MVP because it is simpler and maintainable for the first desktop shell.
 - Use rclone as the cloud engine.
 - Do not directly integrate Google Drive, Dropbox, OneDrive, or other cloud provider APIs.
 - The app owns UI, game management, local JSON config, rclone command execution, cloud metadata, startup restore prompts, manual backup/restore, game monitoring, auto backup, final backup on close, logs, and error handling.
@@ -15,6 +16,8 @@ Game Save Cloud Backup Manager is a Windows desktop app that lets users add game
 - Do not use `rclone sync` by default.
 - Start with safe one-way backup and manual restore.
 - Store configuration under `%LOCALAPPDATA%`.
+- Current local config path is `%LOCALAPPDATA%/GameSaveCloudBackup/config.json`.
+- Current log path is `%LOCALAPPDATA%/GameSaveCloudBackup/Logs/app.log`.
 - On startup, check cloud backup metadata and ask whether to restore if the cloud save is newer.
 - After the startup restore prompt, do not auto-restore again in the same session unless the user manually chooses Restore.
 - While a game is running, back up every 10 minutes by default.
@@ -22,7 +25,6 @@ Game Save Cloud Backup Manager is a Windows desktop app that lets users add game
 
 ## Open questions
 
-- Should the first UI be WPF or WinForms?
 - Should rclone be bundled, downloaded, or user-provided?
 - How should game process detection handle launchers that spawn another process?
 - Should versioned backups be implemented in MVP or after `latest/` works reliably?
@@ -40,7 +42,7 @@ Before modifying code in future sessions, read:
 
 Then update `docs/current-state.md` and `docs/changelog.md` after meaningful changes.
 
-Do not start implementation before confirming the intended Phase 1 technology choice if it is still unresolved.
+Phase 1 technology choice is resolved: WinForms. Future agents should keep the app simple unless a strong reason emerges to migrate UI frameworks.
 
 ## Notes
 
