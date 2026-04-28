@@ -1,0 +1,72 @@
+# Build results
+bin/
+obj/
+[Bb]uild/
+[Bb]uilds/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+
+# Visual Studio
+.vs/
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+*.slnx.sqlite
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# .NET
+*.dll
+*.exe
+*.pdb
+*.apphost
+*.deps.json
+*.runtimeconfig.json
+TestResults/
+coverage/
+coverage.*
+*.coverage
+*.coveragexml
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/packages/
+project.assets.json
+project.nuget.cache
+*.nuget.props
+*.nuget.targets
+
+# Publish output
+publish/
+artifacts/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local app/config samples that may contain machine-specific paths
+*.local.json
+.env
+.env.*
