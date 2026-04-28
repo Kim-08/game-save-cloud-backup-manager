@@ -2,6 +2,7 @@ namespace GameSaveCloudBackup.Services;
 
 public sealed class LoggingService
 {
+    private const int TailReadBytes = 1024 * 1024;
     private readonly object _lock = new();
 
     public string LogDirectory { get; }
@@ -32,9 +33,20 @@ public sealed class LoggingService
                 return [];
             }
 
+            maxLines = Math.Max(1, maxLines);
             using var stream = new FileStream(LogFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            if (stream.Length > TailReadBytes)
+            {
+                stream.Seek(-TailReadBytes, SeekOrigin.End);
+            }
+
             using var reader = new StreamReader(stream);
-            var lines = new Queue<string>(Math.Max(1, maxLines));
+            if (stream.Position > 0)
+            {
+                _ = reader.ReadLine(); // discard the first partial line from the tail window
+            }
+
+            var lines = new Queue<string>(maxLines);
             while (reader.ReadLine() is { } line)
             {
                 lines.Enqueue(line);

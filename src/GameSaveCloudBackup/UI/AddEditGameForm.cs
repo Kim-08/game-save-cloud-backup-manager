@@ -259,6 +259,10 @@ public sealed class AddEditGameForm : Form
         {
             errors.Add("Cloud Backup Folder should not include the rclone remote name or colon.");
         }
+        else if (!IsSafeCloudPath(cloudPath))
+        {
+            errors.Add("Cloud Backup Folder must be a relative folder path and cannot contain '.' or '..' path segments.");
+        }
 
         if (errors.Count > 0)
         {
@@ -278,6 +282,19 @@ public sealed class AddEditGameForm : Form
         Game.StartupRestorePrompt = _startupRestorePromptCheckBox.Checked;
         Game.MaxVersionBackups = (int)_maxVersionsInput.Value;
         return true;
+    }
+
+    private static bool IsSafeCloudPath(string cloudPath)
+    {
+        var normalized = cloudPath.Trim().Replace('\\', '/').Trim('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        return normalized
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .All(segment => segment != "." && segment != "..");
     }
 
     private static GameConfig Clone(GameConfig game) => new()

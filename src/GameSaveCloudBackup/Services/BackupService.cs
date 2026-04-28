@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -24,14 +25,17 @@ public sealed class BackupService
     public async Task<BackupOperationResult> BackupNowAsync(GameConfig game, string backupType, CancellationToken cancellationToken = default)
     {
         var operationLock = _operationLocks.GetOrAdd(game.Id, _ => new SemaphoreSlim(1, 1));
-        if (!await operationLock.WaitAsync(0, cancellationToken))
-        {
-            _loggingService.Info($"{backupType} backup skipped because another backup or restore is already running: {game.Name}");
-            return BackupOperationResult.Fail("Another backup or restore is already running for this game.");
-        }
+        var lockTaken = false;
 
         try
         {
+            lockTaken = await operationLock.WaitAsync(0, cancellationToken);
+            if (!lockTaken)
+            {
+                _loggingService.Info($"{backupType} backup skipped because another backup or restore is already running: {game.Name}");
+                return BackupOperationResult.Fail("Another backup or restore is already running for this game.");
+            }
+
             _loggingService.Info($"{backupType} backup started: {game.Name}");
 
             var validation = await ValidateGameForRcloneOperationAsync(game, requireSaveFolder: true, cancellationToken);
@@ -50,7 +54,7 @@ public sealed class BackupService
             var versionRemotePath = _rcloneService.BuildRemotePath(game.RcloneRemote, game.CloudPath, $"versions/{versionTimestamp}");
 
             var latestResult = await _rcloneService.RunRcloneCommandAsync(
-                $"copy {QuoteArgument(game.SavePath)} {QuoteArgument(latestRemotePath)} --create-empty-src-dirs",
+                ["copy", game.SavePath, latestRemotePath, "--create-empty-src-dirs"],
                 cancellationToken);
             if (!latestResult.Succeeded)
             {
@@ -58,7 +62,7 @@ public sealed class BackupService
             }
 
             var versionResult = await _rcloneService.RunRcloneCommandAsync(
-                $"copy {QuoteArgument(game.SavePath)} {QuoteArgument(versionRemotePath)} --create-empty-src-dirs",
+                ["copy", game.SavePath, versionRemotePath, "--create-empty-src-dirs"],
                 cancellationToken);
             if (!versionResult.Succeeded)
             {
@@ -91,27 +95,39 @@ public sealed class BackupService
         }
         finally
         {
-            operationLock.Release();
+            if (lockTaken)
+            {
+                operationLock.Release();
+            }
         }
     }
 
     public async Task<BackupOperationResult> RestoreFromCloudAsync(GameConfig game, CancellationToken cancellationToken = default)
     {
         var operationLock = _operationLocks.GetOrAdd(game.Id, _ => new SemaphoreSlim(1, 1));
-        if (!await operationLock.WaitAsync(0, cancellationToken))
-        {
-            _loggingService.Info($"Restore skipped because another backup or restore is already running: {game.Name}");
-            return BackupOperationResult.Fail("Another backup or restore is already running for this game.");
-        }
+        var lockTaken = false;
 
         try
         {
+            lockTaken = await operationLock.WaitAsync(0, cancellationToken);
+            if (!lockTaken)
+            {
+                _loggingService.Info($"Restore skipped because another backup or restore is already running: {game.Name}");
+                return BackupOperationResult.Fail("Another backup or restore is already running for this game.");
+            }
+
             _loggingService.Info($"Manual restore started: {game.Name}");
 
             var validation = await ValidateGameForRcloneOperationAsync(game, requireSaveFolder: false, cancellationToken);
             if (!validation.Succeeded)
             {
                 return validation;
+            }
+
+            var closedCheck = EnsureConfiguredGameProcessIsNotRunning(game);
+            if (!closedCheck.Succeeded)
+            {
+                return closedCheck;
             }
 
             _ = await ReadCloudMetadataAsync(game, cancellationToken);
@@ -125,7 +141,7 @@ public sealed class BackupService
             Directory.CreateDirectory(game.SavePath);
             var latestRemotePath = _rcloneService.BuildRemotePath(game.RcloneRemote, game.CloudPath, "latest");
             var restoreResult = await _rcloneService.RunRcloneCommandAsync(
-                $"copy {QuoteArgument(latestRemotePath)} {QuoteArgument(game.SavePath)} --create-empty-src-dirs",
+                ["copy", latestRemotePath, game.SavePath, "--create-empty-src-dirs"],
                 cancellationToken);
 
             if (!restoreResult.Succeeded)
@@ -148,7 +164,10 @@ public sealed class BackupService
         }
         finally
         {
-            operationLock.Release();
+            if (lockTaken)
+            {
+                operationLock.Release();
+            }
         }
     }
 
@@ -278,7 +297,7 @@ public sealed class BackupService
 
         var metadataRemotePath = _rcloneService.BuildRemotePath(game.RcloneRemote, game.CloudPath, "metadata.json");
         var result = await _rcloneService.RunRcloneCommandAsync(
-            $"copyto {QuoteArgument(metadataFilePath)} {QuoteArgument(metadataRemotePath)}",
+            ["copyto", metadataFilePath, metadataRemotePath],
             cancellationToken);
 
         if (!result.Succeeded)
@@ -348,6 +367,11 @@ public sealed class BackupService
         if (game.CloudPath.Contains(':'))
         {
             return BackupOperationResult.Fail("Cloud backup folder should not include the remote name or colon.");
+        }
+
+        if (!IsSafeCloudPath(game.CloudPath))
+        {
+            return BackupOperationResult.Fail("Cloud backup folder must be a relative folder path and cannot contain '.' or '..' path segments.");
         }
 
         if (string.IsNullOrWhiteSpace(game.SavePath))
@@ -439,9 +463,51 @@ public sealed class BackupService
             : null;
     }
 
-    private static string QuoteArgument(string value)
+    private BackupOperationResult EnsureConfiguredGameProcessIsNotRunning(GameConfig game)
     {
-        return $"\"{value.Replace("\"", "\\\"")}\"";
+        if (string.IsNullOrWhiteSpace(game.ExePath) || !File.Exists(game.ExePath))
+        {
+            return BackupOperationResult.Ok("No process check was possible because the game EXE path is missing or invalid.");
+        }
+
+        var processName = Path.GetFileNameWithoutExtension(game.ExePath);
+        if (string.IsNullOrWhiteSpace(processName))
+        {
+            return BackupOperationResult.Ok("No process check was possible because the game process name is invalid.");
+        }
+
+        try
+        {
+            if (Process.GetProcessesByName(processName).Any())
+            {
+                return BackupOperationResult.Fail($"Restore blocked because '{game.Name}' appears to be running. Close the game before restoring saves.");
+            }
+
+            return BackupOperationResult.Ok("Game is not running.");
+        }
+        catch (Exception ex)
+        {
+            _loggingService.Error($"Failed to check whether game is running before restore: {game.Name}", ex);
+            return BackupOperationResult.Fail("Restore blocked because the app could not confirm the game is closed.");
+        }
+    }
+
+    private static bool IsSafeCloudPath(string cloudPath)
+    {
+        if (string.IsNullOrWhiteSpace(cloudPath))
+        {
+            return false;
+        }
+
+        var normalized = cloudPath.Trim().Replace('\\', '/').Trim('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        return normalized
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .All(segment => segment != "." && segment != "..");
     }
 
     private static string CreateTimestamp()

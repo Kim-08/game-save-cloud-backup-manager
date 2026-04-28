@@ -33,8 +33,8 @@ public sealed class ConfigService
 
         try
         {
-            var json = File.ReadAllText(ConfigFilePath);
-            var config = JsonSerializer.Deserialize<AppConfig>(json, _jsonOptions) ?? new AppConfig();
+            using var stream = new FileStream(ConfigFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var config = JsonSerializer.Deserialize<AppConfig>(stream, _jsonOptions) ?? new AppConfig();
             config.Games ??= [];
             _loggingService.Info("Config loaded");
             return config;
@@ -59,11 +59,10 @@ public sealed class ConfigService
         try
         {
             Directory.CreateDirectory(ConfigDirectory);
+            var tempPath = Path.Combine(ConfigDirectory, $"config.{Guid.NewGuid():N}.tmp");
             var json = JsonSerializer.Serialize(config, _jsonOptions);
-            var tempPath = ConfigFilePath + ".tmp";
             File.WriteAllText(tempPath, json);
-            File.Copy(tempPath, ConfigFilePath, overwrite: true);
-            File.Delete(tempPath);
+            File.Move(tempPath, ConfigFilePath, overwrite: true);
             _loggingService.Info("Config saved");
         }
         catch (Exception ex)
@@ -77,7 +76,7 @@ public sealed class ConfigService
     {
         try
         {
-            var backupPath = Path.Combine(ConfigDirectory, $"config.bad.{DateTimeOffset.Now:yyyyMMdd_HHmmss}.json");
+            var backupPath = Path.Combine(ConfigDirectory, $"config.bad.{DateTimeOffset.Now:yyyyMMdd_HHmmss_fff}.json");
             File.Copy(ConfigFilePath, backupPath, overwrite: false);
             return backupPath;
         }

@@ -6,16 +6,17 @@
 - The app includes game management, local JSON config, logging, rclone integration, manual backup/restore, startup restore prompt, process monitoring, automatic running-game backup, final close backup, and polish/reliability improvements.
 - Config is stored at `%LOCALAPPDATA%/GameSaveCloudBackup/config.json`.
 - Invalid/corrupt config JSON is copied to `config.bad.TIMESTAMP.json`, then replaced with a fresh config so the app can still start.
+- Config writes use a temporary file and overwrite move to reduce partial-write risk.
 - Logs are stored at `%LOCALAPPDATA%/GameSaveCloudBackup/Logs/app.log`.
-- The UI includes a scrollable logs viewer plus Refresh Logs, Open Logs Folder, and Open Config Folder buttons.
+- The UI includes a scrollable logs viewer plus Refresh Logs, Open Logs Folder, and Open Config Folder buttons; log reads are tail-limited so large logs are less likely to freeze the UI.
 - Rclone availability is checked on startup using `rclone version`.
 - Rclone remotes are listed with `rclone listremotes`, and the UI includes rclone setup help.
 - Each game row includes Running / Not Running monitor status, Auto Backup enabled state, interval, version retention count, backup-running state, Last Auto Backup, Last Backup, Backup Now, Restore, History, and Open Save Folder.
-- The Add/Edit Game screen validates game name, EXE/launcher path, save folder, rclone remote name, cloud folder, auto-backup interval, startup restore prompt, backup-on-close setting, and max versioned backups.
+- The Add/Edit Game screen validates game name, EXE/launcher path, save folder, rclone remote name, safe relative cloud folder, auto-backup interval, startup restore prompt, backup-on-close setting, and max versioned backups.
 - The game list shows a friendly empty state before games are added.
 - Manual backup copies saves to `latest/`, creates a versioned backup under `versions/TIMESTAMP/`, uploads `metadata.json`, and optionally prunes older managed timestamped versions beyond the configured retention count.
 - Backup history is displayed by listing managed timestamped folders under the cloud `versions/` folder.
-- Manual restore reads cloud metadata when available, asks for confirmation, creates a local safety backup, and restores `latest/` with `rclone copy`.
+- Manual restore reads cloud metadata when available, asks for confirmation, blocks restore if the configured game process appears to be running, creates a local safety backup, and restores `latest/` with `rclone copy`.
 - Startup cloud restore prompt is implemented and session-scoped.
 - `GameMonitorService` monitors configured games by deriving the process name from `exePath` and checking every few seconds.
 - When a game starts, the app logs it, waits about one minute, then runs automatic backups every configured interval while the game remains running.
@@ -23,7 +24,7 @@
 - Automatic backup calls `BackupService.BackupNowAsync(game, "auto")`.
 - Final close backup calls `BackupService.BackupNowAsync(game, "close")`.
 - Per-game overlap protection prevents simultaneous backups/restores for the same game.
-- Rclone command wrapper redacts sensitive CLI arguments in logs, handles cancellation by killing the rclone process tree, and returns friendly failure results.
+- Rclone command wrapper uses `ProcessStartInfo.ArgumentList` instead of shell-style command strings, redacts sensitive CLI arguments in logs, handles cancellation by killing the rclone process tree, and returns friendly failure results.
 - The app does not store rclone credentials or cloud provider credentials.
 - GitHub Actions build workflow exists for Windows and includes publish validation.
 - Windows publish script exists at `scripts/publish-windows.ps1`.

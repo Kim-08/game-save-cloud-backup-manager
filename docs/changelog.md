@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-04-28 - MVP stabilization pass
+
+- Reworked rclone execution to use `ProcessStartInfo.ArgumentList` instead of shell-style quoted command strings, reducing path/space/quote bugs.
+- Added safe relative cloud-path validation in both Add/Edit Game and backup/restore validation.
+- Blocked restore when the configured game process appears to be running.
+- Made log viewer reads tail-limited so large log files are less likely to freeze the UI.
+- Made config writes use a temporary file and overwrite move, and made corrupt-config backups use millisecond timestamps to avoid collisions.
+- Improved backup/restore lock handling so cancellation before lock acquisition does not release an unheld semaphore.
+- Added the required README `MVP checklist` section.
+- Re-ran build and publish validation in the .NET 8 SDK container.
+
 ## 2026-04-28 - Phase 6 polish, packaging, and reliability
 
 - Added a better in-app logs viewer with refresh, Open Logs Folder, and Open Config Folder buttons.

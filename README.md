@@ -6,14 +6,28 @@ Game Save Cloud Backup Manager is a Windows desktop app for backing up game save
 
 **MVP complete.**
 
+## MVP checklist
+
+- [x] Add/edit/remove games works
+- [x] rclone detection works
+- [x] Manual backup works
+- [x] Manual restore works
+- [x] Startup restore prompt works
+- [x] Game monitoring works
+- [x] Auto backup every interval works
+- [x] Final backup on game close works
+- [x] Logs work
+- [x] README explains setup and publishing
+
 Completed MVP capabilities:
 
 - C# / .NET 8 / WinForms desktop app
 - Add, edit, and remove games
-- Better Add/Edit validation for EXE path, save folder, remote name, cloud folder, intervals, and retention
+- Better Add/Edit validation for EXE path, save folder, remote name, safe relative cloud folder, intervals, and retention
 - Friendly empty state when no games are configured
 - Local config at `%LOCALAPPDATA%/GameSaveCloudBackup/config.json`
 - Config corruption handling: invalid JSON is backed up as `config.bad.TIMESTAMP.json` and a fresh config is created
+- More reliable config writes using temporary files and overwrite moves
 - Local logs at `%LOCALAPPDATA%/GameSaveCloudBackup/Logs/app.log`
 - In-app logs viewer with refresh, Open Logs Folder, and Open Config Folder buttons
 - rclone detection using `rclone version`
@@ -21,13 +35,14 @@ Completed MVP capabilities:
 - rclone setup help button and README setup instructions
 - Remote validation helper
 - Remote metadata read helper
-- Defensive rclone command wrapper with logging, secret redaction, and cancellation handling
+- Defensive rclone command wrapper with argument-list execution, logging, secret redaction, and cancellation handling
 - Manual Backup Now using `rclone copy`
 - Versioned backup copy under `versions/TIMESTAMP/`
 - Backup history viewer based on the cloud `versions/` folder
 - Retention for managed timestamped version folders: keep latest `MaxVersionBackups`, or `0` to keep all
 - Metadata upload using `rclone copyto`
 - Manual Restore from Cloud using `rclone copy`
+- Restore is blocked when the configured game process appears to be running
 - Local safety backup before restore at `%LOCALAPPDATA%/GameSaveCloudBackup/SafetyBackups/`
 - Startup cloud metadata check and restore prompt when the cloud backup appears newer
 - Game process monitoring from the configured EXE/launcher path

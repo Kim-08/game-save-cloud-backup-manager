@@ -20,13 +20,13 @@ public sealed class RcloneService
 
     public async Task<bool> CheckRcloneInstalled(CancellationToken cancellationToken = default)
     {
-        var result = await RunRcloneCommandAsync("version", cancellationToken);
+        var result = await RunRcloneCommandAsync(["version"], cancellationToken);
         return result.Succeeded;
     }
 
     public async Task<string?> GetRcloneVersion(CancellationToken cancellationToken = default)
     {
-        var result = await RunRcloneCommandAsync("version", cancellationToken);
+        var result = await RunRcloneCommandAsync(["version"], cancellationToken);
         if (!result.Succeeded)
         {
             return null;
@@ -40,7 +40,7 @@ public sealed class RcloneService
 
     public async Task<IReadOnlyList<string>> ListRemotes(CancellationToken cancellationToken = default)
     {
-        var result = await RunRcloneCommandAsync("listremotes", cancellationToken);
+        var result = await RunRcloneCommandAsync(["listremotes"], cancellationToken);
         if (!result.Succeeded)
         {
             return [];
@@ -64,7 +64,7 @@ public sealed class RcloneService
         }
 
         var normalizedRemote = NormalizeRemoteName(remoteName);
-        var result = await RunRcloneCommandAsync($"lsd {QuoteArgument(normalizedRemote + ":")}", cancellationToken);
+        var result = await RunRcloneCommandAsync(["lsd", normalizedRemote + ":"], cancellationToken);
         return result.Succeeded;
     }
 
@@ -75,7 +75,7 @@ public sealed class RcloneService
             return null;
         }
 
-        var result = await RunRcloneCommandAsync($"cat {QuoteArgument(remotePath)}", cancellationToken);
+        var result = await RunRcloneCommandAsync(["cat", remotePath], cancellationToken);
         return result.Succeeded ? result.StandardOutput : null;
     }
 
@@ -86,7 +86,7 @@ public sealed class RcloneService
             return [];
         }
 
-        var result = await RunRcloneCommandAsync($"lsf {QuoteArgument(remotePath)} --dirs-only", cancellationToken);
+        var result = await RunRcloneCommandAsync(["lsf", remotePath, "--dirs-only"], cancellationToken);
         if (!result.Succeeded)
         {
             return [];
@@ -108,17 +108,17 @@ public sealed class RcloneService
             return RcloneCommandResult.Failed(string.Empty, "Remote path is required.");
         }
 
-        return await RunRcloneCommandAsync($"purge {QuoteArgument(remotePath)}", cancellationToken);
+        return await RunRcloneCommandAsync(["purge", remotePath], cancellationToken);
     }
 
-    public async Task<RcloneCommandResult> RunRcloneCommandAsync(string arguments, CancellationToken cancellationToken = default)
+    public async Task<RcloneCommandResult> RunRcloneCommandAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(arguments))
+        if (arguments.Count == 0 || arguments.Any(string.IsNullOrWhiteSpace))
         {
             return RcloneCommandResult.Failed(string.Empty, "rclone arguments are required.");
         }
 
-        var safeArguments = RedactSensitiveText(arguments);
+        var safeArguments = FormatArgumentsForLog(arguments);
         _loggingService.Info($"Starting rclone command: rclone {safeArguments}");
 
         var stdout = new StringBuilder();
@@ -132,7 +132,6 @@ public sealed class RcloneService
                 StartInfo = new ProcessStartInfo
                 {
                     FileName = "rclone",
-                    Arguments = arguments,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -140,6 +139,11 @@ public sealed class RcloneService
                 },
                 EnableRaisingEvents = true
             };
+
+            foreach (var argument in arguments)
+            {
+                process.StartInfo.ArgumentList.Add(argument);
+            }
 
             process.OutputDataReceived += (_, eventArgs) =>
             {
@@ -273,9 +277,25 @@ public sealed class RcloneService
             : path.Trim().Trim('/', '\\').Replace('\\', '/');
     }
 
-    private static string QuoteArgument(string value)
+    private static string FormatArgumentsForLog(IEnumerable<string> arguments)
     {
-        return $"\"{value.Replace("\"", "\\\"")}\"";
+        return RedactSensitiveText(string.Join(' ', arguments.Select(QuoteForDisplay)));
+    }
+
+    private static string QuoteForDisplay(string value)
+    {
+        if (value.Length == 0)
+        {
+            return "\"\"";
+        }
+
+        var needsQuotes = value.Any(char.IsWhiteSpace) || value.Contains('"');
+        if (!needsQuotes)
+        {
+            return value;
+        }
+
+        return $"\"{value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
     }
 
     private static string RedactSensitiveText(string text)
