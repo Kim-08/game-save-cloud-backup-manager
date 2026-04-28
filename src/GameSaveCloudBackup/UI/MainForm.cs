@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using GameSaveCloudBackup.Models;
 using GameSaveCloudBackup.Services;
 
@@ -5,27 +6,33 @@ namespace GameSaveCloudBackup.UI;
 
 public sealed class MainForm : Form
 {
+    private const string BackupColumnName = "BackupNow";
+    private const string RestoreColumnName = "RestoreFromCloud";
+    private const string OpenSaveFolderColumnName = "OpenSaveFolder";
+
     private readonly ConfigService _configService;
     private readonly LoggingService _loggingService;
     private readonly RcloneService _rcloneService;
+    private readonly BackupService _backupService;
     private readonly AppConfig _appConfig;
     private readonly DataGridView _gamesGrid = new();
     private readonly ListBox _logsList = new();
     private readonly Label _rcloneStatusLabel = new();
     private IReadOnlyList<string> _rcloneRemotes = [];
 
-    public MainForm(ConfigService configService, LoggingService loggingService, RcloneService rcloneService, AppConfig appConfig)
+    public MainForm(ConfigService configService, LoggingService loggingService, RcloneService rcloneService, BackupService backupService, AppConfig appConfig)
     {
         _configService = configService;
         _loggingService = loggingService;
         _rcloneService = rcloneService;
+        _backupService = backupService;
         _appConfig = appConfig;
 
         Text = "Game Save Cloud Backup Manager";
         StartPosition = FormStartPosition.CenterScreen;
-        Width = 1100;
-        Height = 720;
-        MinimumSize = new Size(900, 600);
+        Width = 1280;
+        Height = 760;
+        MinimumSize = new Size(1050, 650);
 
         BuildLayout();
         RefreshGameList();
@@ -117,13 +124,15 @@ public sealed class MainForm : Form
         _gamesGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _gamesGrid.MultiSelect = false;
         _gamesGrid.AutoGenerateColumns = false;
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Name", DataPropertyName = nameof(GameConfig.Name), Width = 180 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "EXE / Launcher", DataPropertyName = nameof(GameConfig.ExePath), Width = 260 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Save Folder", DataPropertyName = nameof(GameConfig.SavePath), Width = 260 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Remote", DataPropertyName = nameof(GameConfig.RcloneRemote), Width = 120 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Cloud Folder", DataPropertyName = nameof(GameConfig.CloudPath), Width = 180 });
-        _gamesGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "Auto", DataPropertyName = nameof(GameConfig.AutoBackup), Width = 60 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Interval", DataPropertyName = nameof(GameConfig.BackupIntervalMinutes), Width = 70 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Name", DataPropertyName = nameof(GameConfig.Name), Width = 160 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Save Folder", DataPropertyName = nameof(GameConfig.SavePath), Width = 250 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Remote", DataPropertyName = nameof(GameConfig.RcloneRemote), Width = 100 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Cloud Folder", DataPropertyName = nameof(GameConfig.CloudPath), Width = 210 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Last Backup", DataPropertyName = nameof(GameConfig.LastBackupTime), Width = 160 });
+        _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = BackupColumnName, HeaderText = "Backup", Text = "Backup Now", UseColumnTextForButtonValue = true, Width = 105 });
+        _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = RestoreColumnName, HeaderText = "Restore", Text = "Restore from Cloud", UseColumnTextForButtonValue = true, Width = 135 });
+        _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = OpenSaveFolderColumnName, HeaderText = "Folder", Text = "Open Save Folder", UseColumnTextForButtonValue = true, Width = 130 });
+        _gamesGrid.CellContentClick += GamesGridCellContentClick;
         _gamesGrid.DoubleClick += EditSelectedGame;
     }
 
@@ -203,6 +212,124 @@ public sealed class MainForm : Form
         _loggingService.Info($"Game removed: {selected.Name}");
         RefreshGameList();
         RefreshLogs();
+    }
+
+    private async void GamesGridCellContentClick(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0)
+        {
+            return;
+        }
+
+        if (_gamesGrid.Rows[e.RowIndex].DataBoundItem is not GameConfig game)
+        {
+            return;
+        }
+
+        var columnName = _gamesGrid.Columns[e.ColumnIndex].Name;
+        if (columnName == BackupColumnName)
+        {
+            await BackupSelectedGameAsync(game);
+        }
+        else if (columnName == RestoreColumnName)
+        {
+            await RestoreSelectedGameAsync(game);
+        }
+        else if (columnName == OpenSaveFolderColumnName)
+        {
+            OpenSaveFolder(game);
+        }
+    }
+
+    private async Task BackupSelectedGameAsync(GameConfig game)
+    {
+        UseWaitCursor = true;
+        _gamesGrid.Enabled = false;
+        try
+        {
+            var result = await _backupService.BackupNowAsync(game, "manual");
+            if (result.Succeeded)
+            {
+                _configService.Save(_appConfig);
+            }
+
+            MessageBox.Show(this, result.Message, "Backup Now", MessageBoxButtons.OK, result.Succeeded ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            _gamesGrid.Enabled = true;
+            UseWaitCursor = false;
+            RefreshGameList();
+            RefreshLogs();
+        }
+    }
+
+    private async Task RestoreSelectedGameAsync(GameConfig game)
+    {
+        UseWaitCursor = true;
+        BackupMetadata? metadata;
+        try
+        {
+            metadata = await _backupService.ReadCloudMetadataAsync(game);
+        }
+        finally
+        {
+            UseWaitCursor = false;
+        }
+
+        var metadataSummary = metadata is null
+            ? "Cloud metadata could not be read. You can still attempt restore if the latest backup exists."
+            : $"Cloud backup date: {metadata.LastBackupTime.LocalDateTime}\nSource device: {metadata.SourceDevice}\nBackup type: {metadata.BackupType}";
+
+        var confirm = MessageBox.Show(
+            this,
+            $"Restore '{game.Name}' from cloud latest?\n\n{metadataSummary}\n\nBefore restoring, the app will create a local safety backup of the current save folder. Restore may overwrite local save files.",
+            "Confirm Restore from Cloud",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+
+        if (confirm != DialogResult.Yes)
+        {
+            return;
+        }
+
+        UseWaitCursor = true;
+        _gamesGrid.Enabled = false;
+        try
+        {
+            var result = await _backupService.RestoreFromCloudAsync(game);
+            MessageBox.Show(this, result.Message, "Restore from Cloud", MessageBoxButtons.OK, result.Succeeded ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            _gamesGrid.Enabled = true;
+            UseWaitCursor = false;
+            RefreshLogs();
+        }
+    }
+
+    private void OpenSaveFolder(GameConfig game)
+    {
+        if (string.IsNullOrWhiteSpace(game.SavePath) || !Directory.Exists(game.SavePath))
+        {
+            MessageBox.Show(this, "Save folder does not exist.", "Open Save Folder", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = game.SavePath,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _loggingService.Error($"Failed to open save folder: {game.Name}", ex);
+            MessageBox.Show(this, $"Could not open save folder: {ex.Message}", "Open Save Folder", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            RefreshLogs();
+        }
     }
 
     private GameConfig? GetSelectedGame()

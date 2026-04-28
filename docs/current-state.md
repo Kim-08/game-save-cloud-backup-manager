@@ -1,17 +1,21 @@
 # Current State
 
-- Phase 2 is completed.
-- Repository contains a runnable C# WinForms desktop application shell under `src/GameSaveCloudBackup`.
-- The app includes the main window, add/edit game form, local JSON config foundation, logging foundation, and rclone integration foundation.
+- Manual backup and manual restore are completed.
+- Repository contains a runnable C# WinForms desktop application under `src/GameSaveCloudBackup`.
+- The app includes the main window, add/edit game form, local JSON config, logging, rclone integration foundation, and manual backup/restore foundation.
 - Config is stored at `%LOCALAPPDATA%/GameSaveCloudBackup/config.json`.
 - Logs are stored at `%LOCALAPPDATA%/GameSaveCloudBackup/Logs/app.log`.
 - Game management supports add, edit, remove, config save/load, and list refresh.
 - Rclone availability is checked on startup using `rclone version`.
 - Main UI shows whether rclone is installed or missing, the rclone version when available, and configured remotes from `rclone listremotes`.
 - Add/Edit Game UI allows selecting or entering an rclone remote and testing the remote.
-- `RcloneService` supports safe async command execution, remote listing, remote validation, remote text file reading, and remote path building.
+- Each game row includes Backup Now, Restore from Cloud, Open Save Folder, and Last Backup display.
+- `BackupService` supports manual backup, manual restore, local safety backups, save folder validation, empty save folder rejection, metadata creation/upload/read, and restore safety behavior.
+- Manual Backup Now uploads to `<remote>:<cloudPath>/latest`, also uploads a versioned copy to `<remote>:<cloudPath>/versions/<TIMESTAMP>`, uploads `metadata.json`, updates local `lastBackupTime`, and logs results.
+- Manual Restore from Cloud reads metadata when available, asks for confirmation in the UI, creates a local safety backup under `%LOCALAPPDATA%/GameSaveCloudBackup/SafetyBackups/`, restores from `<remote>:<cloudPath>/latest`, and logs results.
 - The app does not store rclone credentials or cloud provider credentials.
-- No real backup or restore workflow exists yet.
+- No startup restore prompt exists yet.
 - No automatic game process monitoring exists yet.
+- No automatic game-running backup exists yet.
 - GitHub Actions build workflow exists for Windows.
-- Next recommended step: Phase 3, manual backup and restore.
+- Next recommended step: Phase 5, startup restore prompt and game monitoring.

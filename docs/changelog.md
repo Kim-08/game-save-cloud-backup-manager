@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-04-28 - Manual backup and restore
+
+- Added `BackupService` for manual backup, manual restore, safety backups, save folder validation, empty save folder rejection, metadata creation/upload/read, and restore support.
+- Added Backup Now, Restore from Cloud, Open Save Folder, and Last Backup display to the game list UI.
+- Manual Backup Now now copies saves to `latest/`, copies a versioned backup to `versions/<TIMESTAMP>/`, uploads `metadata.json`, updates local `lastBackupTime`, and logs results.
+- Manual Restore from Cloud now reads cloud metadata when available, asks for confirmation, creates a local safety backup, restores cloud `latest/`, and logs results.
+- Updated README, current state, project memory, and phase docs.
+- Set next recommended step to Phase 5: startup restore prompt and game monitoring.
+
 ## 2026-04-28 - Phase 2
 
 - Added `RcloneService` with async command execution, rclone availability checks, version lookup, remote listing, remote validation, remote text reads, and remote path building.

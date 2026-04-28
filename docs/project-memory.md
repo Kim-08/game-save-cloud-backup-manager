@@ -13,6 +13,7 @@ Game Save Cloud Backup Manager is a Windows desktop app that lets users add game
 - Phase 2 added `RcloneService` for rclone detection, version checks, remote listing, remote validation, remote text reads, safe async command execution, and remote path building.
 - Do not directly integrate Google Drive, Dropbox, OneDrive, or other cloud provider APIs.
 - The app owns UI, game management, local JSON config, rclone command execution, cloud metadata, startup restore prompts, manual backup/restore, game monitoring, auto backup, final backup on close, logs, and error handling.
+- Manual backup and restore are implemented through `BackupService`. Backup uses `rclone copy` to both `latest/` and `versions/<TIMESTAMP>/`, then uploads `metadata.json` with `rclone copyto`. Restore reads metadata where available, requires UI confirmation, creates a local safety backup, then restores cloud `latest/` with `rclone copy`.
 - Use `rclone copy` by default.
 - Do not use `rclone sync` by default.
 - Start with safe one-way backup and manual restore.
@@ -21,6 +22,7 @@ Game Save Cloud Backup Manager is a Windows desktop app that lets users add game
 - Current log path is `%LOCALAPPDATA%/GameSaveCloudBackup/Logs/app.log`.
 - The app checks rclone on startup with `rclone version` and lists remotes with `rclone listremotes`.
 - The app must not store rclone credentials or cloud provider credentials; rclone owns its own auth/config.
+- Local safety backups before restore are stored under `%LOCALAPPDATA%/GameSaveCloudBackup/SafetyBackups/`.
 - On startup, check cloud backup metadata and ask whether to restore if the cloud save is newer.
 - After the startup restore prompt, do not auto-restore again in the same session unless the user manually chooses Restore.
 - While a game is running, back up every 10 minutes by default.
@@ -47,7 +49,7 @@ Then update `docs/current-state.md` and `docs/changelog.md` after meaningful cha
 
 Phase 1 technology choice is resolved: WinForms. Future agents should keep the app simple unless a strong reason emerges to migrate UI frameworks.
 
-Phase 2 is complete. Next recommended implementation phase is Phase 3: manual backup and restore. Do not implement automatic game monitoring until the later monitoring phase.
+Manual backup and manual restore are complete. Next recommended implementation phase is Phase 5: startup restore prompt and game monitoring. Keep restore prompts conservative; accidental save overwrites are not a charming genre.
 
 ## Notes
 

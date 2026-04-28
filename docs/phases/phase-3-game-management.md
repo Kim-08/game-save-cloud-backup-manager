@@ -1,34 +1,27 @@
-# Phase 3: Manual Backup and Restore
-
-> Note: this file was originally created as `phase-3-game-management.md`. Basic game management was completed during Phase 1, so Phase 3 now focuses on manual backup and restore.
+# Phase 3: Game Management
 
 ## Goal
 
-Implement explicit user-triggered backup and restore workflows using safe `rclone copy` commands.
+Allow users to manage games and their backup configuration.
 
-## Tasks
+## Delivered
 
-- Add manual Backup action for a selected game.
-- Add manual Restore action for a selected game.
-- Use `RcloneService.BuildRemotePath()` for `latest/` and `metadata.json` remote paths.
-- Use `rclone copy` by default.
-- Do not use `rclone sync`.
-- Generate and upload `metadata.json` after successful backup.
-- Read cloud `metadata.json` before restore where available.
-- Confirm before restore because restores may overwrite local save files. Tiny data-loss goblin, very real teeth.
-- Log backup and restore starts/results.
-- Show useful UI errors for missing save path, missing remote, missing cloud path, rclone failure, or remote failure.
+Basic game management was completed earlier as part of the desktop shell foundation and has now been extended with manual operation buttons.
 
-## Explicitly not included
+- Game list UI exists.
+- Create/edit/delete game flows exist.
+- Game entries are stored in local JSON config.
+- Add/Edit Game supports EXE path, save folder path, rclone remote, cloud folder, backup interval, and backup-on-close settings.
+- Game rows now show last backup date.
+- Game rows now include:
+  - Backup Now
+  - Restore from Cloud
+  - Open Save Folder
 
-- No automatic game monitoring.
-- No interval backup while games are running.
-- No final backup on game close.
-- No destructive sync behavior.
+## Status
 
-## Exit criteria
+Completed.
 
-- User can manually back up a configured game to `<remote>:<cloudPath>/latest`.
-- User can manually restore a configured game from `<remote>:<cloudPath>/latest` after confirmation.
-- Metadata is written/read enough to support later startup restore prompt behavior.
-- Build passes.
+## Notes
+
+Manual backup and restore behavior is documented in `phase-4-backup-and-restore.md` because that is where the rclone copy behavior, metadata, safety backup, and restore confirmation live.
