@@ -6,19 +6,19 @@ Create repository memory, planning documents, architecture notes, roadmap, risk 
 
 ## Phase 1: Repo and desktop shell
 
-Create the C# desktop application shell using WPF or WinForms. Add basic project structure, main window, app settings, and placeholder views.
+Create the C# desktop application shell using WinForms. Add basic project structure, main window, app settings, placeholder views, config storage, logging, and basic game management.
 
 ## Phase 2: rclone integration
 
-Add rclone discovery/configuration, command execution wrapper, remote listing, copy operations, metadata read/write, and error handling.
+Add rclone discovery/configuration checks, command execution wrapper, remote listing, remote validation, metadata text-read foundation, remote path building, and error handling.
 
-## Phase 3: Game management
+## Phase 3: Manual backup and restore
 
-Add UI and storage for creating, editing, deleting, and validating game entries.
+Implement manual backup and manual restore using safe `rclone copy`, metadata generation/read/write, backup result logging, and clear restore confirmation. Do not implement automatic game monitoring yet.
 
-## Phase 4: Backup and restore
+## Phase 4: Startup restore prompt and backup metadata behavior
 
-Implement manual backup, manual restore, startup metadata check, and restore prompt behavior.
+Implement startup metadata check, cloud-newer restore prompt, one-prompt-per-session behavior, and conflict-safe UX around metadata differences.
 
 ## Phase 5: Game monitoring and auto backup
 

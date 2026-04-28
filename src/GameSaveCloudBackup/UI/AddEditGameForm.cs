@@ -1,13 +1,15 @@
 using GameSaveCloudBackup.Models;
+using GameSaveCloudBackup.Services;
 
 namespace GameSaveCloudBackup.UI;
 
 public sealed class AddEditGameForm : Form
 {
+    private readonly RcloneService? _rcloneService;
     private readonly TextBox _nameTextBox = new();
     private readonly TextBox _exePathTextBox = new();
     private readonly TextBox _savePathTextBox = new();
-    private readonly TextBox _rcloneRemoteTextBox = new();
+    private readonly ComboBox _rcloneRemoteComboBox = new() { DropDownStyle = ComboBoxStyle.DropDown };
     private readonly TextBox _cloudPathTextBox = new();
     private readonly CheckBox _autoBackupCheckBox = new() { Checked = true };
     private readonly NumericUpDown _backupIntervalInput = new() { Minimum = 1, Maximum = 1440, Value = 10 };
@@ -15,15 +17,17 @@ public sealed class AddEditGameForm : Form
 
     public GameConfig Game { get; private set; }
 
-    public AddEditGameForm(GameConfig? game = null)
+    public AddEditGameForm(RcloneService? rcloneService = null, IEnumerable<string>? remotes = null, GameConfig? game = null)
     {
+        _rcloneService = rcloneService;
         Game = game is null ? new GameConfig() : Clone(game);
         Text = game is null ? "Add Game" : "Edit Game";
         StartPosition = FormStartPosition.CenterParent;
-        Width = 700;
+        Width = 760;
         Height = 430;
-        MinimumSize = new Size(650, 420);
+        MinimumSize = new Size(700, 420);
         BuildLayout();
+        LoadRemotes(remotes ?? []);
         LoadGame();
     }
 
@@ -39,12 +43,12 @@ public sealed class AddEditGameForm : Form
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
 
         AddTextRow(root, 0, "Game Name", _nameTextBox);
         AddBrowseRow(root, 1, "Game EXE/Launcher", _exePathTextBox, BrowseExe);
         AddBrowseRow(root, 2, "Save Folder", _savePathTextBox, BrowseSaveFolder);
-        AddTextRow(root, 3, "Rclone Remote", _rcloneRemoteTextBox);
+        AddRemoteRow(root, 3);
         AddTextRow(root, 4, "Cloud Backup Folder", _cloudPathTextBox);
 
         root.Controls.Add(new Label { Text = "Auto Backup", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 5);
@@ -62,13 +66,7 @@ public sealed class AddEditGameForm : Form
         var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill };
         var saveButton = new Button { Text = "Save", DialogResult = DialogResult.OK, Width = 90 };
         var cancelButton = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90 };
-        saveButton.Click += (_, e) =>
-        {
-            if (!ValidateAndSave())
-            {
-                e = EventArgs.Empty;
-            }
-        };
+        saveButton.Click += (_, _) => ValidateAndSave();
         buttons.Controls.Add(saveButton);
         buttons.Controls.Add(cancelButton);
         root.Controls.Add(buttons, 0, 8);
@@ -85,6 +83,16 @@ public sealed class AddEditGameForm : Form
         textBox.Dock = DockStyle.Fill;
         root.Controls.Add(textBox, 1, row);
         root.SetColumnSpan(textBox, 2);
+    }
+
+    private void AddRemoteRow(TableLayoutPanel root, int row)
+    {
+        root.Controls.Add(new Label { Text = "Rclone Remote", AutoSize = true, Anchor = AnchorStyles.Left }, 0, row);
+        _rcloneRemoteComboBox.Dock = DockStyle.Fill;
+        root.Controls.Add(_rcloneRemoteComboBox, 1, row);
+        var testRemoteButton = new Button { Text = "Test Remote", Dock = DockStyle.Fill };
+        testRemoteButton.Click += TestRemote;
+        root.Controls.Add(testRemoteButton, 2, row);
     }
 
     private static void AddBrowseRow(TableLayoutPanel root, int row, string label, TextBox textBox, EventHandler browseHandler)
@@ -119,12 +127,51 @@ public sealed class AddEditGameForm : Form
         }
     }
 
+    private async void TestRemote(object? sender, EventArgs e)
+    {
+        var remoteName = _rcloneRemoteComboBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(remoteName))
+        {
+            MessageBox.Show(this, "Enter or select an rclone remote first.", "Rclone Remote", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        if (_rcloneService is null)
+        {
+            MessageBox.Show(this, "Rclone service is unavailable.", "Rclone Remote", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        UseWaitCursor = true;
+        try
+        {
+            var ok = await _rcloneService.TestRemote(remoteName);
+            var message = ok
+                ? $"Remote '{remoteName.TrimEnd(':')}' is reachable."
+                : $"Remote '{remoteName.TrimEnd(':')}' could not be reached. Check rclone config, remote name, and cloud authentication.";
+            MessageBox.Show(this, message, "Rclone Remote Test", MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            UseWaitCursor = false;
+        }
+    }
+
+    private void LoadRemotes(IEnumerable<string> remotes)
+    {
+        _rcloneRemoteComboBox.Items.Clear();
+        foreach (var remote in remotes.Where(remote => !string.IsNullOrWhiteSpace(remote)).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            _rcloneRemoteComboBox.Items.Add(remote.TrimEnd(':'));
+        }
+    }
+
     private void LoadGame()
     {
         _nameTextBox.Text = Game.Name;
         _exePathTextBox.Text = Game.ExePath;
         _savePathTextBox.Text = Game.SavePath;
-        _rcloneRemoteTextBox.Text = Game.RcloneRemote;
+        _rcloneRemoteComboBox.Text = Game.RcloneRemote;
         _cloudPathTextBox.Text = string.IsNullOrWhiteSpace(Game.CloudPath) ? "GameSaveBackups/" : Game.CloudPath;
         _autoBackupCheckBox.Checked = Game.AutoBackup;
         _backupIntervalInput.Value = Math.Clamp(Game.BackupIntervalMinutes, 1, 1440);
@@ -143,7 +190,7 @@ public sealed class AddEditGameForm : Form
         Game.Name = _nameTextBox.Text.Trim();
         Game.ExePath = _exePathTextBox.Text.Trim();
         Game.SavePath = _savePathTextBox.Text.Trim();
-        Game.RcloneRemote = _rcloneRemoteTextBox.Text.Trim();
+        Game.RcloneRemote = _rcloneRemoteComboBox.Text.Trim().TrimEnd(':');
         Game.CloudPath = _cloudPathTextBox.Text.Trim();
         Game.AutoBackup = _autoBackupCheckBox.Checked;
         Game.BackupIntervalMinutes = (int)_backupIntervalInput.Value;

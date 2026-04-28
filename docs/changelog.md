@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-04-28 - Phase 2
+
+- Added `RcloneService` with async command execution, rclone availability checks, version lookup, remote listing, remote validation, remote text reads, and remote path building.
+- Updated main UI to show rclone installed/missing status, version, and configured remotes.
+- Updated Add/Edit Game UI to select or enter rclone remotes and test remote access.
+- Added rclone setup instructions to README.
+- Updated rclone research notes, project memory, current state, and Phase 2 documentation.
+- Marked Phase 2 complete and set Phase 3 manual backup and restore as the next step.
+
 ## 2026-04-28 - Phase 1
 
 - Implemented C# WinForms desktop application shell.

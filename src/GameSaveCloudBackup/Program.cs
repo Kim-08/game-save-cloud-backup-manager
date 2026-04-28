@@ -14,8 +14,9 @@ internal static class Program
         loggingService.Info("App startup");
 
         var configService = new ConfigService(loggingService);
+        var rcloneService = new RcloneService(loggingService);
         var appConfig = configService.Load();
 
-        Application.Run(new MainForm(configService, loggingService, appConfig));
+        Application.Run(new MainForm(configService, loggingService, rcloneService, appConfig));
     }
 }

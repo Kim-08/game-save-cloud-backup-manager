@@ -18,8 +18,8 @@ Start here for project context.
 - [Phase 0: Project definition](phases/phase-0-project-definition.md)
 - [Phase 1: Repo and desktop shell](phases/phase-1-repo-and-desktop-shell.md)
 - [Phase 2: rclone integration](phases/phase-2-rclone-integration.md)
-- [Phase 3: Game management](phases/phase-3-game-management.md)
-- [Phase 4: Backup and restore](phases/phase-4-backup-and-restore.md)
+- [Phase 3: Manual backup and restore](phases/phase-3-game-management.md)
+- [Phase 4: Startup restore prompt and backup metadata behavior](phases/phase-4-backup-and-restore.md)
 - [Phase 5: Game monitoring and auto backup](phases/phase-5-game-monitoring-auto-backup.md)
 - [Phase 6: Polish and packaging](phases/phase-6-polish-and-packaging.md)
 

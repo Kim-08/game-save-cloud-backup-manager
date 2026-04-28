@@ -7,15 +7,18 @@ public sealed class MainForm : Form
 {
     private readonly ConfigService _configService;
     private readonly LoggingService _loggingService;
+    private readonly RcloneService _rcloneService;
     private readonly AppConfig _appConfig;
     private readonly DataGridView _gamesGrid = new();
     private readonly ListBox _logsList = new();
     private readonly Label _rcloneStatusLabel = new();
+    private IReadOnlyList<string> _rcloneRemotes = [];
 
-    public MainForm(ConfigService configService, LoggingService loggingService, AppConfig appConfig)
+    public MainForm(ConfigService configService, LoggingService loggingService, RcloneService rcloneService, AppConfig appConfig)
     {
         _configService = configService;
         _loggingService = loggingService;
+        _rcloneService = rcloneService;
         _appConfig = appConfig;
 
         Text = "Game Save Cloud Backup Manager";
@@ -29,6 +32,12 @@ public sealed class MainForm : Form
         RefreshLogs();
     }
 
+    protected override async void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        await RefreshRcloneStatusAsync();
+    }
+
     private void BuildLayout()
     {
         var root = new TableLayoutPanel
@@ -39,7 +48,7 @@ public sealed class MainForm : Form
             ColumnCount = 1
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 65));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 35));
 
@@ -59,11 +68,18 @@ public sealed class MainForm : Form
         root.Controls.Add(header, 0, 0);
 
         var rclonePanel = new GroupBox { Text = "Rclone Status", Dock = DockStyle.Fill };
-        _rcloneStatusLabel.Text = "Placeholder: rclone integration will be implemented in Phase 2.";
+        var rcloneLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
+        rcloneLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        rcloneLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        _rcloneStatusLabel.Text = "Checking rclone availability...";
         _rcloneStatusLabel.Dock = DockStyle.Fill;
         _rcloneStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
         _rcloneStatusLabel.Padding = new Padding(10, 0, 0, 0);
-        rclonePanel.Controls.Add(_rcloneStatusLabel);
+        var refreshRcloneButton = new Button { Text = "Refresh Rclone", Dock = DockStyle.Fill };
+        refreshRcloneButton.Click += async (_, _) => await RefreshRcloneStatusAsync();
+        rcloneLayout.Controls.Add(_rcloneStatusLabel, 0, 0);
+        rcloneLayout.Controls.Add(refreshRcloneButton, 1, 0);
+        rclonePanel.Controls.Add(rcloneLayout);
         root.Controls.Add(rclonePanel, 0, 1);
 
         var gamePanel = new GroupBox { Text = "Games", Dock = DockStyle.Fill };
@@ -111,9 +127,30 @@ public sealed class MainForm : Form
         _gamesGrid.DoubleClick += EditSelectedGame;
     }
 
+    private async Task RefreshRcloneStatusAsync()
+    {
+        _rcloneStatusLabel.Text = "Checking rclone availability...";
+
+        var version = await _rcloneService.GetRcloneVersion();
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            _rcloneRemotes = [];
+            _rcloneStatusLabel.Text = "Missing: rclone is not installed or is not available in PATH. Install rclone, run `rclone config`, then refresh.";
+            RefreshLogs();
+            return;
+        }
+
+        _rcloneRemotes = await _rcloneService.ListRemotes();
+        var remoteSummary = _rcloneRemotes.Count == 0
+            ? "No configured remotes found. Run `rclone config` to create one, for example `gdrive`."
+            : $"{_rcloneRemotes.Count} remote(s): {string.Join(", ", _rcloneRemotes)}";
+        _rcloneStatusLabel.Text = $"Installed: {version}{Environment.NewLine}{remoteSummary}";
+        RefreshLogs();
+    }
+
     private void AddGame(object? sender, EventArgs e)
     {
-        using var form = new AddEditGameForm();
+        using var form = new AddEditGameForm(_rcloneService, _rcloneRemotes);
         if (form.ShowDialog(this) == DialogResult.OK)
         {
             _appConfig.Games.Add(form.Game);
@@ -132,7 +169,7 @@ public sealed class MainForm : Form
             return;
         }
 
-        using var form = new AddEditGameForm(selected);
+        using var form = new AddEditGameForm(_rcloneService, _rcloneRemotes, selected);
         if (form.ShowDialog(this) == DialogResult.OK)
         {
             var index = _appConfig.Games.FindIndex(game => game.Id == selected.Id);
