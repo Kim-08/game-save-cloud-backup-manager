@@ -34,8 +34,10 @@ Status: completed.
 
 Implement process monitoring, 10-minute default running-game backup interval, and final backup when the game exits.
 
+Status: completed.
+
+## Phase 6: Polish, packaging, and reliability
+
+Improve UX, logs, validation, retry/backoff behavior, launcher process matching, settings, packaging, documentation, release workflow, and installer/distribution story.
+
 Status: next recommended step.
-
-## Phase 6: Polish and packaging
-
-Improve UX, logs, validation, settings, packaging, documentation, and release workflow.

@@ -2,7 +2,7 @@
 
 Game Save Cloud Backup Manager is a Windows desktop application for managing game save backups to cloud storage through [rclone](https://rclone.org/).
 
-Users can add games, select each game's EXE or launcher, choose the save folder, choose an rclone remote and cloud folder, then run manual backups and restores. Automatic game-running backup is still intentionally not implemented yet. The monster remains in the next room.
+Users can add games, select each game's EXE or launcher, choose the save folder, choose an rclone remote and cloud folder, then run manual backups and restores. Automatic game-running backup is now implemented. The monster has been domesticated into a timer. This is probably fine.
 
 ## Current status
 
@@ -25,13 +25,17 @@ The app currently supports:
 - Manual Restore from Cloud using `rclone copy`
 - Startup cloud metadata check and restore prompt when cloud appears newer
 - Session-only prompt tracking so startup prompts are not repeated in the same app session
+- Game process monitoring from the configured EXE/launcher path
+- Running / Not Running UI status
+- Automatic backup after a game starts, then every configured interval
+- Final close backup when the game exits, if enabled
+- Per-game overlap protection so only one backup runs at a time
 - Local safety backup before restore at `%LOCALAPPDATA%/GameSaveCloudBackup/SafetyBackups/`
 
 Not implemented yet:
 
-- Game process monitoring
-- Automatic backup while a game is running
-- Final backup when a game closes
+- Packaging/release polish
+- Advanced reliability features
 
 ## Running locally
 
@@ -98,6 +102,29 @@ gdrive
 
 The app does not store Google Drive, Dropbox, OneDrive, or other provider credentials. Those remain in rclone's own config.
 
+## Automatic backup while a game is running
+
+The app monitors each configured game by deriving the process name from the selected EXE/launcher path. It checks every few seconds and updates the game row with:
+
+- Running / Not Running
+- Last auto backup time
+- Whether a backup is currently running
+- Auto backup interval
+
+When a game starts running, the app logs `Game started`, waits about one minute, then runs an automatic backup if auto backup is enabled. While the game remains running, it backs up every configured interval, defaulting to 10 minutes.
+
+When the game closes, the app logs `Game closed`, waits about five seconds, then runs one final backup if **Backup on Close** is enabled.
+
+Safety rules:
+
+- No backup runs if the save folder is missing.
+- No backup runs if the save folder is empty.
+- No overlapping backups run for the same game.
+- Automatic backups use `BackupService.BackupNowAsync(game, "auto")`.
+- Close backups use `BackupService.BackupNowAsync(game, "close")`.
+
+Auto backup can be enabled or disabled per game in the Add/Edit Game window.
+
 ## Startup restore prompt
 
 When the app opens, it checks configured games that have `startupRestorePrompt` enabled. For each game, it tries to read:
@@ -119,6 +146,21 @@ Prompt choices:
 - **Ask Later** — also dismisses the automatic startup prompt for this app session. Manual restore remains available.
 
 If rclone is missing, metadata is missing/invalid, or the cloud backup is older than/equal to local saves, the app logs the result and does not prompt. No drama. Rare, but appreciated.
+
+## Auto backup test
+
+1. Configure rclone and add a game with:
+   - Valid EXE path
+   - Non-empty save folder
+   - Valid rclone remote
+   - Cloud folder
+   - Auto Backup enabled
+   - Backup interval set to a small value for testing, such as 1 minute
+2. Start the configured game EXE.
+3. Confirm the game row changes to **Running**.
+4. Wait for the first automatic backup delay, then confirm files appear in `latest/`, `versions/<TIMESTAMP>/`, and `metadata.json`.
+5. Close the game.
+6. Confirm the row returns to **Not Running** and a final close backup is logged when Backup on Close is enabled.
 
 ## Manual backup test
 

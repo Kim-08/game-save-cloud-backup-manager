@@ -1,21 +1,19 @@
 # Current State
 
-- Startup cloud restore prompt is completed.
+- Phase 5 game monitoring and automatic backup is completed.
 - Repository contains a runnable C# WinForms desktop application under `src/GameSaveCloudBackup`.
-- The app includes the main window, add/edit game form, local JSON config, logging, rclone integration, manual backup/restore, and startup restore check.
+- The app includes game management, local JSON config, logging, rclone integration, manual backup/restore, startup restore prompt, process monitoring, automatic running-game backup, and final close backup.
 - Config is stored at `%LOCALAPPDATA%/GameSaveCloudBackup/config.json`.
 - Logs are stored at `%LOCALAPPDATA%/GameSaveCloudBackup/Logs/app.log`.
-- Game management supports add, edit, remove, config save/load, and list refresh.
 - Rclone availability is checked on startup using `rclone version`.
-- Main UI shows whether rclone is installed or missing, the rclone version when available, and configured remotes from `rclone listremotes`.
-- Each game row includes Backup Now, Restore from Cloud, Open Save Folder, and Last Backup display.
-- Manual Backup Now uploads to `<remote>:<cloudPath>/latest`, also uploads a versioned copy to `<remote>:<cloudPath>/versions/<TIMESTAMP>`, uploads `metadata.json`, updates local `lastBackupTime`, and logs results.
-- Manual Restore from Cloud reads metadata when available, asks for confirmation, creates a local safety backup under `%LOCALAPPDATA%/GameSaveCloudBackup/SafetyBackups/`, restores from `<remote>:<cloudPath>/latest`, and logs results.
-- On app startup, games with `startupRestorePrompt` enabled are checked once per app session. If cloud metadata exists and is newer than the local save folder, or local save folder is missing, the app prompts the user to Restore from Cloud, Keep Local Save, or Ask Later.
-- Startup restore uses the same safe restore process from `BackupService`, including local safety backup before restore.
-- Startup prompt session state is in-memory only and is not stored in config.
+- Each game row includes Running / Not Running monitor status, Auto Backup enabled state, interval, backup-running state, Last Auto Backup, Last Backup, Backup Now, Restore from Cloud, and Open Save Folder.
+- `GameMonitorService` monitors configured games by deriving the process name from `exePath` and checking every few seconds.
+- When a game starts, the app logs it, waits about one minute, then runs automatic backups every configured interval while the game remains running.
+- When a game closes, the app logs it, waits about five seconds, then runs one final close backup if `backupOnClose` is enabled.
+- Automatic backup calls `BackupService.BackupNowAsync(game, "auto")`.
+- Final close backup calls `BackupService.BackupNowAsync(game, "close")`.
+- Per-game overlap protection prevents simultaneous backups for the same game.
+- Auto backup skips and logs missing save folders, empty save folders, invalid EXE paths, rclone failures, and backup failures.
 - The app does not store rclone credentials or cloud provider credentials.
-- No automatic game process monitoring exists yet.
-- No automatic game-running backup exists yet.
 - GitHub Actions build workflow exists for Windows.
-- Next recommended step: Phase 5, game monitoring and automatic backup.
+- Next recommended step: Phase 6, polish, packaging, and reliability.

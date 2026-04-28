@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-04-28 - Phase 5 game monitoring and automatic backup
+
+- Added `GameMonitorService` for process monitoring based on each game EXE/launcher path.
+- Added runtime UI columns for Running / Not Running, Auto Backup, interval, backup-running state, and Last Auto Backup.
+- Added automatic backup after game start and repeated interval backups while running.
+- Added final close backup after a game exits when `backupOnClose` is enabled.
+- Added per-game overlap protection to prevent simultaneous backups for the same game.
+- Added skip/error logging for invalid EXE path, missing save folder, empty save folder, rclone failures, backup failures, and overlapping backup attempts.
+- Updated README, current state, project memory, and Phase 5 docs.
+- Set next recommended step to Phase 6: polish, packaging, and reliability.
+
 ## 2026-04-28 - Startup restore prompt
 
 - Added startup cloud restore checks for games with `startupRestorePrompt` enabled.

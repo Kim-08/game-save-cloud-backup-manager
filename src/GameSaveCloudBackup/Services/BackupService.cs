@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
 using GameSaveCloudBackup.Models;
@@ -8,6 +9,7 @@ public sealed class BackupService
 {
     private readonly RcloneService _rcloneService;
     private readonly LoggingService _loggingService;
+    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _operationLocks = new();
     private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
     public BackupService(RcloneService rcloneService, LoggingService loggingService)
@@ -18,6 +20,13 @@ public sealed class BackupService
 
     public async Task<BackupOperationResult> BackupNowAsync(GameConfig game, string backupType, CancellationToken cancellationToken = default)
     {
+        var operationLock = _operationLocks.GetOrAdd(game.Id, _ => new SemaphoreSlim(1, 1));
+        if (!await operationLock.WaitAsync(0, cancellationToken))
+        {
+            _loggingService.Info($"{backupType} backup skipped because another backup or restore is already running: {game.Name}");
+            return BackupOperationResult.Fail("Another backup or restore is already running for this game.");
+        }
+
         try
         {
             _loggingService.Info($"Manual backup started: {game.Name}");
@@ -69,10 +78,21 @@ public sealed class BackupService
             _loggingService.Error($"Manual backup failed: {game.Name}", ex);
             return BackupOperationResult.Fail($"Backup failed: {ex.Message}");
         }
+        finally
+        {
+            operationLock.Release();
+        }
     }
 
     public async Task<BackupOperationResult> RestoreFromCloudAsync(GameConfig game, CancellationToken cancellationToken = default)
     {
+        var operationLock = _operationLocks.GetOrAdd(game.Id, _ => new SemaphoreSlim(1, 1));
+        if (!await operationLock.WaitAsync(0, cancellationToken))
+        {
+            _loggingService.Info($"Restore skipped because another backup or restore is already running: {game.Name}");
+            return BackupOperationResult.Fail("Another backup or restore is already running for this game.");
+        }
+
         try
         {
             _loggingService.Info($"Manual restore started: {game.Name}");
@@ -110,6 +130,10 @@ public sealed class BackupService
         {
             _loggingService.Error($"Manual restore failed: {game.Name}", ex);
             return BackupOperationResult.Fail($"Restore failed: {ex.Message}");
+        }
+        finally
+        {
+            operationLock.Release();
         }
     }
 

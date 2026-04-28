@@ -14,6 +14,7 @@ public sealed class MainForm : Form
     private readonly LoggingService _loggingService;
     private readonly RcloneService _rcloneService;
     private readonly BackupService _backupService;
+    private readonly GameMonitorService _gameMonitorService;
     private readonly AppConfig _appConfig;
     private readonly DataGridView _gamesGrid = new();
     private readonly ListBox _logsList = new();
@@ -22,13 +23,15 @@ public sealed class MainForm : Form
     private readonly HashSet<Guid> _startupRestorePromptedGameIds = [];
     private IReadOnlyList<string> _rcloneRemotes = [];
 
-    public MainForm(ConfigService configService, LoggingService loggingService, RcloneService rcloneService, BackupService backupService, AppConfig appConfig)
+    public MainForm(ConfigService configService, LoggingService loggingService, RcloneService rcloneService, BackupService backupService, GameMonitorService gameMonitorService, AppConfig appConfig)
     {
         _configService = configService;
         _loggingService = loggingService;
         _rcloneService = rcloneService;
         _backupService = backupService;
+        _gameMonitorService = gameMonitorService;
         _appConfig = appConfig;
+        _gameMonitorService.StateChanged += GameMonitorServiceStateChanged;
 
         Text = "Game Save Cloud Backup Manager";
         StartPosition = FormStartPosition.CenterScreen;
@@ -46,6 +49,13 @@ public sealed class MainForm : Form
         base.OnShown(e);
         await RefreshRcloneStatusAsync();
         await CheckStartupRestorePromptsAsync();
+        _gameMonitorService.Start(_appConfig.Games);
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        _gameMonitorService.Stop();
+        base.OnFormClosing(e);
     }
 
     private void BuildLayout()
@@ -127,11 +137,15 @@ public sealed class MainForm : Form
         _gamesGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _gamesGrid.MultiSelect = false;
         _gamesGrid.AutoGenerateColumns = false;
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Name", DataPropertyName = nameof(GameConfig.Name), Width = 160 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Save Folder", DataPropertyName = nameof(GameConfig.SavePath), Width = 250 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Remote", DataPropertyName = nameof(GameConfig.RcloneRemote), Width = 100 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Cloud Folder", DataPropertyName = nameof(GameConfig.CloudPath), Width = 210 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Last Backup", DataPropertyName = nameof(GameConfig.LastBackupTime), Width = 160 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Name", DataPropertyName = nameof(GameConfig.Name), Width = 150 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Monitor", DataPropertyName = nameof(GameConfig.MonitorStatus), Width = 145 });
+        _gamesGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "Auto", DataPropertyName = nameof(GameConfig.AutoBackup), Width = 55 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Interval", DataPropertyName = nameof(GameConfig.AutoBackupIntervalDisplay), Width = 70 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Backing Up", DataPropertyName = nameof(GameConfig.IsBackupRunning), Width = 85 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Last Auto Backup", DataPropertyName = nameof(GameConfig.LastAutoBackupTime), Width = 155 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Last Backup", DataPropertyName = nameof(GameConfig.LastBackupTime), Width = 155 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Remote", DataPropertyName = nameof(GameConfig.RcloneRemote), Width = 90 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Cloud Folder", DataPropertyName = nameof(GameConfig.CloudPath), Width = 180 });
         _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = BackupColumnName, HeaderText = "Backup", Text = "Backup Now", UseColumnTextForButtonValue = true, Width = 105 });
         _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = RestoreColumnName, HeaderText = "Restore", Text = "Restore from Cloud", UseColumnTextForButtonValue = true, Width = 135 });
         _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = OpenSaveFolderColumnName, HeaderText = "Folder", Text = "Open Save Folder", UseColumnTextForButtonValue = true, Width = 130 });
@@ -256,6 +270,7 @@ public sealed class MainForm : Form
         {
             _appConfig.Games.Add(form.Game);
             _configService.Save(_appConfig);
+            _gameMonitorService.UpdateGames(_appConfig.Games);
             _loggingService.Info($"Game added: {form.Game.Name}");
             RefreshGameList();
             RefreshLogs();
@@ -278,6 +293,7 @@ public sealed class MainForm : Form
             {
                 _appConfig.Games[index] = form.Game;
                 _configService.Save(_appConfig);
+                _gameMonitorService.UpdateGames(_appConfig.Games);
                 _loggingService.Info($"Game edited: {form.Game.Name}");
                 RefreshGameList();
                 RefreshLogs();
@@ -301,6 +317,7 @@ public sealed class MainForm : Form
 
         _appConfig.Games.RemoveAll(game => game.Id == selected.Id);
         _configService.Save(_appConfig);
+        _gameMonitorService.UpdateGames(_appConfig.Games);
         _loggingService.Info($"Game removed: {selected.Name}");
         RefreshGameList();
         RefreshLogs();
@@ -422,6 +439,24 @@ public sealed class MainForm : Form
             MessageBox.Show(this, $"Could not open save folder: {ex.Message}", "Open Save Folder", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             RefreshLogs();
         }
+    }
+
+    private void GameMonitorServiceStateChanged(object? sender, GameMonitorStateChangedEventArgs e)
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action(() => GameMonitorServiceStateChanged(sender, e)));
+            return;
+        }
+
+        _configService.Save(_appConfig);
+        RefreshGameList();
+        RefreshLogs();
     }
 
     private GameConfig? GetSelectedGame()

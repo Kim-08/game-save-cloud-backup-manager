@@ -39,4 +39,16 @@ public sealed class GameConfig
 
     [JsonPropertyName("lastBackupTime")]
     public DateTimeOffset? LastBackupTime { get; set; }
+
+    [JsonIgnore]
+    public string MonitorStatus { get; set; } = "Not Running";
+
+    [JsonIgnore]
+    public DateTimeOffset? LastAutoBackupTime { get; set; }
+
+    [JsonIgnore]
+    public bool IsBackupRunning { get; set; }
+
+    [JsonIgnore]
+    public string AutoBackupIntervalDisplay { get; set; } = "10 min";
 }

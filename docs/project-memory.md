@@ -15,6 +15,7 @@ Game Save Cloud Backup Manager is a Windows desktop app that lets users add game
 - The app owns UI, game management, local JSON config, rclone command execution, cloud metadata, startup restore prompts, manual backup/restore, game monitoring, auto backup, final backup on close, logs, and error handling.
 - Manual backup and restore are implemented through `BackupService`. Backup uses `rclone copy` to both `latest/` and `versions/<TIMESTAMP>/`, then uploads `metadata.json` with `rclone copyto`. Restore reads metadata where available, requires UI confirmation, creates a local safety backup, then restores cloud `latest/` with `rclone copy`.
 - Startup cloud restore prompt is implemented. On app open, games with `startupRestorePrompt` enabled are checked once per app session by reading cloud `metadata.json`; if cloud metadata is newer than local save modified time, or the local save folder is missing, the app prompts Restore from Cloud / Keep Local Save / Ask Later. Prompt state is in-memory only.
+- Phase 5 added `GameMonitorService` for process monitoring and automatic backups. It derives the process name from `exePath`, checks every few seconds, updates runtime UI status, waits about one minute after game start before first auto backup, backs up every configured interval, and runs a final close backup after about five seconds when `backupOnClose` is enabled. It prevents overlapping backups per game.
 - Use `rclone copy` by default.
 - Do not use `rclone sync` by default.
 - Start with safe one-way backup and manual restore.
@@ -50,7 +51,7 @@ Then update `docs/current-state.md` and `docs/changelog.md` after meaningful cha
 
 Phase 1 technology choice is resolved: WinForms. Future agents should keep the app simple unless a strong reason emerges to migrate UI frameworks.
 
-Startup cloud restore prompt is complete. Next recommended implementation phase is Phase 5: game monitoring and automatic backup. Keep restore prompts conservative; accidental save overwrites are not a charming genre.
+Phase 5 game monitoring and automatic backup is complete. Next recommended implementation phase is Phase 6: polish, packaging, and reliability. Keep restore and auto-backup behavior conservative; accidental save overwrites are not a charming genre.
 
 ## Notes
 
