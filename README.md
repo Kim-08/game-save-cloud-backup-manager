@@ -6,7 +6,7 @@ Users can add games, select each game's EXE or launcher, choose the save folder,
 
 ## Current status
 
-Manual backup and manual restore are implemented.
+Manual backup, manual restore, and startup cloud restore prompt are implemented.
 
 The app currently supports:
 
@@ -23,11 +23,12 @@ The app currently supports:
 - Versioned backup copy using `rclone copy`
 - Metadata upload using `rclone copyto`
 - Manual Restore from Cloud using `rclone copy`
+- Startup cloud metadata check and restore prompt when cloud appears newer
+- Session-only prompt tracking so startup prompts are not repeated in the same app session
 - Local safety backup before restore at `%LOCALAPPDATA%/GameSaveCloudBackup/SafetyBackups/`
 
 Not implemented yet:
 
-- Startup restore prompt
 - Game process monitoring
 - Automatic backup while a game is running
 - Final backup when a game closes
@@ -96,6 +97,28 @@ gdrive
 ```
 
 The app does not store Google Drive, Dropbox, OneDrive, or other provider credentials. Those remain in rclone's own config.
+
+## Startup restore prompt
+
+When the app opens, it checks configured games that have `startupRestorePrompt` enabled. For each game, it tries to read:
+
+```text
+<remote>:<cloudPath>/metadata.json
+```
+
+If metadata exists, the app compares the cloud backup date to the latest modified time in the local save folder. If the cloud backup appears newer, or if the local save folder is missing, the app shows a restore prompt with:
+
+- Cloud backup date
+- Source device
+- Local save date, when available
+
+Prompt choices:
+
+- **Restore from Cloud** — runs the same safe restore path, including local safety backup first.
+- **Keep Local Save** — dismisses the startup prompt for this app session.
+- **Ask Later** — also dismisses the automatic startup prompt for this app session. Manual restore remains available.
+
+If rclone is missing, metadata is missing/invalid, or the cloud backup is older than/equal to local saves, the app logs the result and does not prompt. No drama. Rare, but appreciated.
 
 ## Manual backup test
 

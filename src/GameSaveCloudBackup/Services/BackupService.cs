@@ -117,11 +117,6 @@ public sealed class BackupService
     {
         try
         {
-            if (!IsSaveFolderValid(game))
-            {
-                return BackupOperationResult.Fail("Cannot create safety backup because the local save folder does not exist.");
-            }
-
             var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var targetDirectory = Path.Combine(
                 appData,
@@ -129,6 +124,13 @@ public sealed class BackupService
                 "SafetyBackups",
                 SanitizePathSegment(game.Name),
                 $"before_restore_{CreateTimestamp()}");
+
+            if (!IsSaveFolderValid(game))
+            {
+                Directory.CreateDirectory(targetDirectory);
+                _loggingService.Info($"Safety backup skipped because local save folder does not exist: {game.Name}; reservedPath={targetDirectory}");
+                return BackupOperationResult.Ok("Local save folder did not exist, so there was nothing to safety-backup.", targetDirectory);
+            }
 
             await CopyDirectoryAsync(game.SavePath, targetDirectory, cancellationToken);
             _loggingService.Info($"Safety backup created: {game.Name}; path={targetDirectory}");
@@ -138,6 +140,29 @@ public sealed class BackupService
         {
             _loggingService.Error($"Failed to create safety backup: {game.Name}", ex);
             return BackupOperationResult.Fail($"Failed to create safety backup: {ex.Message}");
+        }
+    }
+
+    public DateTimeOffset? GetLocalSaveLastModified(GameConfig game)
+    {
+        if (!IsSaveFolderValid(game))
+        {
+            return null;
+        }
+
+        try
+        {
+            var latestWrite = Directory
+                .EnumerateFileSystemEntries(game.SavePath, "*", SearchOption.AllDirectories)
+                .Select(path => File.Exists(path) ? File.GetLastWriteTimeUtc(path) : Directory.GetLastWriteTimeUtc(path))
+                .DefaultIfEmpty(Directory.GetLastWriteTimeUtc(game.SavePath))
+                .Max();
+            return new DateTimeOffset(latestWrite, TimeSpan.Zero).ToLocalTime();
+        }
+        catch (Exception ex)
+        {
+            _loggingService.Error($"Failed to determine local save last modified time: {game.Name}", ex);
+            return null;
         }
     }
 
@@ -240,6 +265,11 @@ public sealed class BackupService
         if (string.IsNullOrWhiteSpace(game.CloudPath))
         {
             return BackupOperationResult.Fail("Cloud backup folder is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(game.SavePath))
+        {
+            return BackupOperationResult.Fail("Save folder path is required.");
         }
 
         if (requireSaveFolder && !IsSaveFolderValid(game))

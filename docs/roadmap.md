@@ -4,6 +4,8 @@
 
 Create repository memory, planning documents, architecture notes, roadmap, risk list, and decision records.
 
+Status: completed.
+
 ## Phase 1: Repo and desktop shell
 
 Create the C# desktop application shell using WinForms. Add basic project structure, main window, app settings, placeholder views, config storage, logging, and basic game management.
@@ -22,15 +24,15 @@ Add UI and storage for creating, editing, deleting, and validating game entries,
 
 Status: completed.
 
-## Phase 4: Manual backup and restore
+## Phase 4: Backup, restore, and startup restore prompt
 
-Implement manual Backup Now and Restore from Cloud using safe `rclone copy`, versioned backups, metadata upload/read, local safety backup before restore, restore confirmation, and error handling.
+Implement manual Backup Now and Restore from Cloud using safe `rclone copy`, versioned backups, metadata upload/read, local safety backup before restore, restore confirmation, startup cloud metadata checks, and one-prompt-per-session restore prompt behavior.
 
 Status: completed.
 
-## Phase 5: Startup restore prompt and game monitoring
+## Phase 5: Game monitoring and automatic backup
 
-Implement startup metadata check, cloud-newer restore prompt, one-prompt-per-session behavior, process monitoring, 10-minute default running-game backup interval, and final backup when the game exits.
+Implement process monitoring, 10-minute default running-game backup interval, and final backup when the game exits.
 
 Status: next recommended step.
 

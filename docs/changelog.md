@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-04-28 - Startup restore prompt
+
+- Added startup cloud restore checks for games with `startupRestorePrompt` enabled.
+- Added `RestorePromptDialog` with Restore from Cloud, Keep Local Save, and Ask Later choices.
+- Added in-memory per-session tracking for games already checked and prompted.
+- Startup check reads cloud `metadata.json`, compares cloud backup time against local save folder modified time, and prompts only when cloud appears newer or local saves are missing.
+- Startup restore uses the existing safe `BackupService.RestoreFromCloudAsync` path with local safety backup before restore.
+- Missing rclone, missing/invalid metadata, and older cloud metadata are logged and skipped without crashing.
+- Updated README, current state, project memory, and Phase 4 docs.
+- Set next recommended step to Phase 5: game monitoring and automatic backup.
+
 ## 2026-04-28 - Manual backup and restore
 
 - Added `BackupService` for manual backup, manual restore, safety backups, save folder validation, empty save folder rejection, metadata creation/upload/read, and restore support.

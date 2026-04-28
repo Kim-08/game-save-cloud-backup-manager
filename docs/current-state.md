@@ -1,21 +1,21 @@
 # Current State
 
-- Manual backup and manual restore are completed.
+- Startup cloud restore prompt is completed.
 - Repository contains a runnable C# WinForms desktop application under `src/GameSaveCloudBackup`.
-- The app includes the main window, add/edit game form, local JSON config, logging, rclone integration foundation, and manual backup/restore foundation.
+- The app includes the main window, add/edit game form, local JSON config, logging, rclone integration, manual backup/restore, and startup restore check.
 - Config is stored at `%LOCALAPPDATA%/GameSaveCloudBackup/config.json`.
 - Logs are stored at `%LOCALAPPDATA%/GameSaveCloudBackup/Logs/app.log`.
 - Game management supports add, edit, remove, config save/load, and list refresh.
 - Rclone availability is checked on startup using `rclone version`.
 - Main UI shows whether rclone is installed or missing, the rclone version when available, and configured remotes from `rclone listremotes`.
-- Add/Edit Game UI allows selecting or entering an rclone remote and testing the remote.
 - Each game row includes Backup Now, Restore from Cloud, Open Save Folder, and Last Backup display.
-- `BackupService` supports manual backup, manual restore, local safety backups, save folder validation, empty save folder rejection, metadata creation/upload/read, and restore safety behavior.
 - Manual Backup Now uploads to `<remote>:<cloudPath>/latest`, also uploads a versioned copy to `<remote>:<cloudPath>/versions/<TIMESTAMP>`, uploads `metadata.json`, updates local `lastBackupTime`, and logs results.
-- Manual Restore from Cloud reads metadata when available, asks for confirmation in the UI, creates a local safety backup under `%LOCALAPPDATA%/GameSaveCloudBackup/SafetyBackups/`, restores from `<remote>:<cloudPath>/latest`, and logs results.
+- Manual Restore from Cloud reads metadata when available, asks for confirmation, creates a local safety backup under `%LOCALAPPDATA%/GameSaveCloudBackup/SafetyBackups/`, restores from `<remote>:<cloudPath>/latest`, and logs results.
+- On app startup, games with `startupRestorePrompt` enabled are checked once per app session. If cloud metadata exists and is newer than the local save folder, or local save folder is missing, the app prompts the user to Restore from Cloud, Keep Local Save, or Ask Later.
+- Startup restore uses the same safe restore process from `BackupService`, including local safety backup before restore.
+- Startup prompt session state is in-memory only and is not stored in config.
 - The app does not store rclone credentials or cloud provider credentials.
-- No startup restore prompt exists yet.
 - No automatic game process monitoring exists yet.
 - No automatic game-running backup exists yet.
 - GitHub Actions build workflow exists for Windows.
-- Next recommended step: Phase 5, startup restore prompt and game monitoring.
+- Next recommended step: Phase 5, game monitoring and automatic backup.

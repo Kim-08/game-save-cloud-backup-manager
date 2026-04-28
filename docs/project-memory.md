@@ -14,6 +14,7 @@ Game Save Cloud Backup Manager is a Windows desktop app that lets users add game
 - Do not directly integrate Google Drive, Dropbox, OneDrive, or other cloud provider APIs.
 - The app owns UI, game management, local JSON config, rclone command execution, cloud metadata, startup restore prompts, manual backup/restore, game monitoring, auto backup, final backup on close, logs, and error handling.
 - Manual backup and restore are implemented through `BackupService`. Backup uses `rclone copy` to both `latest/` and `versions/<TIMESTAMP>/`, then uploads `metadata.json` with `rclone copyto`. Restore reads metadata where available, requires UI confirmation, creates a local safety backup, then restores cloud `latest/` with `rclone copy`.
+- Startup cloud restore prompt is implemented. On app open, games with `startupRestorePrompt` enabled are checked once per app session by reading cloud `metadata.json`; if cloud metadata is newer than local save modified time, or the local save folder is missing, the app prompts Restore from Cloud / Keep Local Save / Ask Later. Prompt state is in-memory only.
 - Use `rclone copy` by default.
 - Do not use `rclone sync` by default.
 - Start with safe one-way backup and manual restore.
@@ -49,7 +50,7 @@ Then update `docs/current-state.md` and `docs/changelog.md` after meaningful cha
 
 Phase 1 technology choice is resolved: WinForms. Future agents should keep the app simple unless a strong reason emerges to migrate UI frameworks.
 
-Manual backup and manual restore are complete. Next recommended implementation phase is Phase 5: startup restore prompt and game monitoring. Keep restore prompts conservative; accidental save overwrites are not a charming genre.
+Startup cloud restore prompt is complete. Next recommended implementation phase is Phase 5: game monitoring and automatic backup. Keep restore prompts conservative; accidental save overwrites are not a charming genre.
 
 ## Notes
 

@@ -18,6 +18,8 @@ public sealed class MainForm : Form
     private readonly DataGridView _gamesGrid = new();
     private readonly ListBox _logsList = new();
     private readonly Label _rcloneStatusLabel = new();
+    private readonly HashSet<Guid> _startupRestoreCheckedGameIds = [];
+    private readonly HashSet<Guid> _startupRestorePromptedGameIds = [];
     private IReadOnlyList<string> _rcloneRemotes = [];
 
     public MainForm(ConfigService configService, LoggingService loggingService, RcloneService rcloneService, BackupService backupService, AppConfig appConfig)
@@ -43,6 +45,7 @@ public sealed class MainForm : Form
     {
         base.OnShown(e);
         await RefreshRcloneStatusAsync();
+        await CheckStartupRestorePromptsAsync();
     }
 
     private void BuildLayout()
@@ -155,6 +158,95 @@ public sealed class MainForm : Form
             : $"{_rcloneRemotes.Count} remote(s): {string.Join(", ", _rcloneRemotes)}";
         _rcloneStatusLabel.Text = $"Installed: {version}{Environment.NewLine}{remoteSummary}";
         RefreshLogs();
+    }
+
+    private async Task CheckStartupRestorePromptsAsync()
+    {
+        if (_appConfig.Games.Count == 0)
+        {
+            return;
+        }
+
+        var rcloneVersion = await _rcloneService.GetRcloneVersion();
+        if (string.IsNullOrWhiteSpace(rcloneVersion))
+        {
+            _loggingService.Info("Startup restore checks skipped because rclone is missing or not available in PATH.");
+            RefreshLogs();
+            return;
+        }
+
+        foreach (var game in _appConfig.Games.Where(game => game.StartupRestorePrompt))
+        {
+            if (_startupRestoreCheckedGameIds.Contains(game.Id))
+            {
+                continue;
+            }
+
+            _startupRestoreCheckedGameIds.Add(game.Id);
+
+            if (string.IsNullOrWhiteSpace(game.RcloneRemote) || string.IsNullOrWhiteSpace(game.CloudPath))
+            {
+                _loggingService.Info($"Startup restore check skipped because remote/cloud path is missing: {game.Name}");
+                continue;
+            }
+
+            var metadata = await _backupService.ReadCloudMetadataAsync(game);
+            if (metadata is null)
+            {
+                _loggingService.Info($"Startup restore check found no usable cloud metadata: {game.Name}");
+                continue;
+            }
+
+            var localSaveDate = _backupService.GetLocalSaveLastModified(game);
+            var shouldPrompt = localSaveDate is null || metadata.LastBackupTime.ToUniversalTime() > localSaveDate.Value.ToUniversalTime();
+            if (!shouldPrompt)
+            {
+                _loggingService.Info($"Startup restore check skipped prompt because local save is newer or equal: {game.Name}");
+                continue;
+            }
+
+            await ShowStartupRestorePromptAsync(game, metadata, localSaveDate);
+        }
+
+        RefreshLogs();
+    }
+
+    private async Task ShowStartupRestorePromptAsync(GameConfig game, BackupMetadata metadata, DateTimeOffset? localSaveDate)
+    {
+        if (_startupRestorePromptedGameIds.Contains(game.Id))
+        {
+            return;
+        }
+
+        _startupRestorePromptedGameIds.Add(game.Id);
+        using var dialog = new RestorePromptDialog(game, metadata, localSaveDate);
+        _ = dialog.ShowDialog(this);
+
+        if (dialog.Choice == RestorePromptChoice.RestoreFromCloud)
+        {
+            // TODO: When process detection exists, block startup restore if the game is currently running.
+            UseWaitCursor = true;
+            _gamesGrid.Enabled = false;
+            try
+            {
+                var result = await _backupService.RestoreFromCloudAsync(game);
+                MessageBox.Show(this, result.Message, "Startup Restore", MessageBoxButtons.OK, result.Succeeded ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                _gamesGrid.Enabled = true;
+                UseWaitCursor = false;
+                RefreshLogs();
+            }
+        }
+        else if (dialog.Choice == RestorePromptChoice.KeepLocalSave)
+        {
+            _loggingService.Info($"Startup restore prompt dismissed: keep local save for {game.Name}");
+        }
+        else
+        {
+            _loggingService.Info($"Startup restore prompt dismissed: ask later for {game.Name}");
+        }
     }
 
     private void AddGame(object? sender, EventArgs e)
