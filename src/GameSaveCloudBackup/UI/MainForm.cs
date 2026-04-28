@@ -8,6 +8,7 @@ public sealed class MainForm : Form
 {
     private const string BackupColumnName = "BackupNow";
     private const string RestoreColumnName = "RestoreFromCloud";
+    private const string HistoryColumnName = "BackupHistory";
     private const string OpenSaveFolderColumnName = "OpenSaveFolder";
 
     private readonly ConfigService _configService;
@@ -17,8 +18,10 @@ public sealed class MainForm : Form
     private readonly GameMonitorService _gameMonitorService;
     private readonly AppConfig _appConfig;
     private readonly DataGridView _gamesGrid = new();
-    private readonly ListBox _logsList = new();
+    private readonly TextBox _logsTextBox = new();
+    private readonly Label _emptyStateLabel = new();
     private readonly Label _rcloneStatusLabel = new();
+    private readonly CancellationTokenSource _appCts = new();
     private readonly HashSet<Guid> _startupRestoreCheckedGameIds = [];
     private readonly HashSet<Guid> _startupRestorePromptedGameIds = [];
     private IReadOnlyList<string> _rcloneRemotes = [];
@@ -35,9 +38,9 @@ public sealed class MainForm : Form
 
         Text = "Game Save Cloud Backup Manager";
         StartPosition = FormStartPosition.CenterScreen;
-        Width = 1280;
-        Height = 760;
-        MinimumSize = new Size(1050, 650);
+        Width = 1320;
+        Height = 820;
+        MinimumSize = new Size(1100, 700);
 
         BuildLayout();
         RefreshGameList();
@@ -47,15 +50,36 @@ public sealed class MainForm : Form
     protected override async void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        await RefreshRcloneStatusAsync();
-        await CheckStartupRestorePromptsAsync();
-        _gameMonitorService.Start(_appConfig.Games);
+        try
+        {
+            await RefreshRcloneStatusAsync();
+            await CheckStartupRestorePromptsAsync();
+            _gameMonitorService.Start(_appConfig.Games);
+        }
+        catch (Exception ex)
+        {
+            _loggingService.Error("Startup work failed", ex);
+            ShowError("Startup", "Some startup checks failed. The app is still open, because apparently we are being merciful today.", ex);
+            RefreshLogs();
+        }
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
+        _appCts.Cancel();
         _gameMonitorService.Stop();
         base.OnFormClosing(e);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _gameMonitorService.StateChanged -= GameMonitorServiceStateChanged;
+            _appCts.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 
     private void BuildLayout()
@@ -68,13 +92,13 @@ public sealed class MainForm : Form
             ColumnCount = 1
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 65));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 35));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 64));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 36));
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
         header.Controls.Add(new Label
         {
             Text = "Game Save Cloud Backup Manager",
@@ -88,41 +112,78 @@ public sealed class MainForm : Form
         root.Controls.Add(header, 0, 0);
 
         var rclonePanel = new GroupBox { Text = "Rclone Status", Dock = DockStyle.Fill };
-        var rcloneLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
+        var rcloneLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3 };
         rcloneLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         rcloneLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        rcloneLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
         _rcloneStatusLabel.Text = "Checking rclone availability...";
         _rcloneStatusLabel.Dock = DockStyle.Fill;
         _rcloneStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
         _rcloneStatusLabel.Padding = new Padding(10, 0, 0, 0);
         var refreshRcloneButton = new Button { Text = "Refresh Rclone", Dock = DockStyle.Fill };
-        refreshRcloneButton.Click += async (_, _) => await RefreshRcloneStatusAsync();
+        refreshRcloneButton.Click += async (_, _) => await SafeUiAsync("Refresh Rclone", RefreshRcloneStatusAsync);
+        var rcloneHelpButton = new Button { Text = "Rclone Setup Help", Dock = DockStyle.Fill };
+        rcloneHelpButton.Click += (_, _) => ShowRcloneHelp();
         rcloneLayout.Controls.Add(_rcloneStatusLabel, 0, 0);
         rcloneLayout.Controls.Add(refreshRcloneButton, 1, 0);
+        rcloneLayout.Controls.Add(rcloneHelpButton, 2, 0);
         rclonePanel.Controls.Add(rcloneLayout);
         root.Controls.Add(rclonePanel, 0, 1);
 
         var gamePanel = new GroupBox { Text = "Games", Dock = DockStyle.Fill };
         var gamePanelLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
         gamePanelLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        gamePanelLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        gamePanelLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         ConfigureGamesGrid();
-        gamePanelLayout.Controls.Add(_gamesGrid, 0, 0);
+
+        var gridHost = new Panel { Dock = DockStyle.Fill };
+        _emptyStateLabel.Text = "No games added yet. Click Add Game to pick a game EXE, save folder, rclone remote, and cloud backup folder. A small ritual, then backups.";
+        _emptyStateLabel.Dock = DockStyle.Fill;
+        _emptyStateLabel.TextAlign = ContentAlignment.MiddleCenter;
+        _emptyStateLabel.Font = new Font(Font.FontFamily, 11, FontStyle.Italic);
+        _emptyStateLabel.ForeColor = SystemColors.GrayText;
+        gridHost.Controls.Add(_emptyStateLabel);
+        gridHost.Controls.Add(_gamesGrid);
+        gamePanelLayout.Controls.Add(gridHost, 0, 0);
 
         var actions = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, Dock = DockStyle.Fill };
         var editButton = new Button { Text = "Edit Selected", Width = 120 };
         var removeButton = new Button { Text = "Remove Selected", Width = 130 };
+        var openConfigButton = new Button { Text = "Open Config Folder", Width = 145 };
         editButton.Click += EditSelectedGame;
         removeButton.Click += RemoveSelectedGame;
+        openConfigButton.Click += (_, _) => OpenFolder(_configService.ConfigDirectory, "Open Config Folder");
         actions.Controls.Add(editButton);
         actions.Controls.Add(removeButton);
+        actions.Controls.Add(openConfigButton);
         gamePanelLayout.Controls.Add(actions, 0, 1);
         gamePanel.Controls.Add(gamePanelLayout);
         root.Controls.Add(gamePanel, 0, 2);
 
-        var logsPanel = new GroupBox { Text = "Recent Logs / Status", Dock = DockStyle.Fill };
-        _logsList.Dock = DockStyle.Fill;
-        logsPanel.Controls.Add(_logsList);
+        var logsPanel = new GroupBox { Text = "Logs / Status", Dock = DockStyle.Fill };
+        var logsLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
+        logsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        logsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        _logsTextBox.Dock = DockStyle.Fill;
+        _logsTextBox.Multiline = true;
+        _logsTextBox.ReadOnly = true;
+        _logsTextBox.ScrollBars = ScrollBars.Both;
+        _logsTextBox.WordWrap = false;
+        _logsTextBox.Font = new Font(FontFamily.GenericMonospace, 9);
+        logsLayout.Controls.Add(_logsTextBox, 0, 0);
+
+        var logButtons = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, Dock = DockStyle.Fill };
+        var refreshLogsButton = new Button { Text = "Refresh Logs", Width = 110 };
+        var openLogsButton = new Button { Text = "Open Logs Folder", Width = 135 };
+        var openConfigFromLogsButton = new Button { Text = "Open Config Folder", Width = 145 };
+        refreshLogsButton.Click += (_, _) => RefreshLogs();
+        openLogsButton.Click += (_, _) => OpenFolder(_loggingService.LogDirectory, "Open Logs Folder");
+        openConfigFromLogsButton.Click += (_, _) => OpenFolder(_configService.ConfigDirectory, "Open Config Folder");
+        logButtons.Controls.Add(refreshLogsButton);
+        logButtons.Controls.Add(openLogsButton);
+        logButtons.Controls.Add(openConfigFromLogsButton);
+        logsLayout.Controls.Add(logButtons, 0, 1);
+        logsPanel.Controls.Add(logsLayout);
         root.Controls.Add(logsPanel, 0, 3);
 
         Controls.Add(root);
@@ -137,18 +198,20 @@ public sealed class MainForm : Form
         _gamesGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _gamesGrid.MultiSelect = false;
         _gamesGrid.AutoGenerateColumns = false;
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Name", DataPropertyName = nameof(GameConfig.Name), Width = 150 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Name", DataPropertyName = nameof(GameConfig.Name), Width = 140 });
         _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Monitor", DataPropertyName = nameof(GameConfig.MonitorStatus), Width = 145 });
         _gamesGrid.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "Auto", DataPropertyName = nameof(GameConfig.AutoBackup), Width = 55 });
         _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Interval", DataPropertyName = nameof(GameConfig.AutoBackupIntervalDisplay), Width = 70 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Versions", DataPropertyName = nameof(GameConfig.MaxVersionBackups), Width = 70 });
         _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Backing Up", DataPropertyName = nameof(GameConfig.IsBackupRunning), Width = 85 });
         _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Last Auto Backup", DataPropertyName = nameof(GameConfig.LastAutoBackupTime), Width = 155 });
         _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Last Backup", DataPropertyName = nameof(GameConfig.LastBackupTime), Width = 155 });
         _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Remote", DataPropertyName = nameof(GameConfig.RcloneRemote), Width = 90 });
-        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Cloud Folder", DataPropertyName = nameof(GameConfig.CloudPath), Width = 180 });
+        _gamesGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Cloud Folder", DataPropertyName = nameof(GameConfig.CloudPath), Width = 170 });
         _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = BackupColumnName, HeaderText = "Backup", Text = "Backup Now", UseColumnTextForButtonValue = true, Width = 105 });
-        _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = RestoreColumnName, HeaderText = "Restore", Text = "Restore from Cloud", UseColumnTextForButtonValue = true, Width = 135 });
-        _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = OpenSaveFolderColumnName, HeaderText = "Folder", Text = "Open Save Folder", UseColumnTextForButtonValue = true, Width = 130 });
+        _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = RestoreColumnName, HeaderText = "Restore", Text = "Restore", UseColumnTextForButtonValue = true, Width = 90 });
+        _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = HistoryColumnName, HeaderText = "History", Text = "History", UseColumnTextForButtonValue = true, Width = 80 });
+        _gamesGrid.Columns.Add(new DataGridViewButtonColumn { Name = OpenSaveFolderColumnName, HeaderText = "Folder", Text = "Open Save", UseColumnTextForButtonValue = true, Width = 105 });
         _gamesGrid.CellContentClick += GamesGridCellContentClick;
         _gamesGrid.DoubleClick += EditSelectedGame;
     }
@@ -157,7 +220,7 @@ public sealed class MainForm : Form
     {
         _rcloneStatusLabel.Text = "Checking rclone availability...";
 
-        var version = await _rcloneService.GetRcloneVersion();
+        var version = await _rcloneService.GetRcloneVersion(_appCts.Token);
         if (string.IsNullOrWhiteSpace(version))
         {
             _rcloneRemotes = [];
@@ -166,7 +229,7 @@ public sealed class MainForm : Form
             return;
         }
 
-        _rcloneRemotes = await _rcloneService.ListRemotes();
+        _rcloneRemotes = await _rcloneService.ListRemotes(_appCts.Token);
         var remoteSummary = _rcloneRemotes.Count == 0
             ? "No configured remotes found. Run `rclone config` to create one, for example `gdrive`."
             : $"{_rcloneRemotes.Count} remote(s): {string.Join(", ", _rcloneRemotes)}";
@@ -181,7 +244,7 @@ public sealed class MainForm : Form
             return;
         }
 
-        var rcloneVersion = await _rcloneService.GetRcloneVersion();
+        var rcloneVersion = await _rcloneService.GetRcloneVersion(_appCts.Token);
         if (string.IsNullOrWhiteSpace(rcloneVersion))
         {
             _loggingService.Info("Startup restore checks skipped because rclone is missing or not available in PATH.");
@@ -191,6 +254,7 @@ public sealed class MainForm : Form
 
         foreach (var game in _appConfig.Games.Where(game => game.StartupRestorePrompt))
         {
+            _appCts.Token.ThrowIfCancellationRequested();
             if (_startupRestoreCheckedGameIds.Contains(game.Id))
             {
                 continue;
@@ -204,7 +268,7 @@ public sealed class MainForm : Form
                 continue;
             }
 
-            var metadata = await _backupService.ReadCloudMetadataAsync(game);
+            var metadata = await _backupService.ReadCloudMetadataAsync(game, _appCts.Token);
             if (metadata is null)
             {
                 _loggingService.Info($"Startup restore check found no usable cloud metadata: {game.Name}");
@@ -238,12 +302,11 @@ public sealed class MainForm : Form
 
         if (dialog.Choice == RestorePromptChoice.RestoreFromCloud)
         {
-            // TODO: When process detection exists, block startup restore if the game is currently running.
             UseWaitCursor = true;
             _gamesGrid.Enabled = false;
             try
             {
-                var result = await _backupService.RestoreFromCloudAsync(game);
+                var result = await _backupService.RestoreFromCloudAsync(game, _appCts.Token);
                 MessageBox.Show(this, result.Message, "Startup Restore", MessageBoxButtons.OK, result.Succeeded ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
             }
             finally
@@ -269,7 +332,7 @@ public sealed class MainForm : Form
         if (form.ShowDialog(this) == DialogResult.OK)
         {
             _appConfig.Games.Add(form.Game);
-            _configService.Save(_appConfig);
+            SaveConfigWithDialog();
             _gameMonitorService.UpdateGames(_appConfig.Games);
             _loggingService.Info($"Game added: {form.Game.Name}");
             RefreshGameList();
@@ -292,7 +355,7 @@ public sealed class MainForm : Form
             if (index >= 0)
             {
                 _appConfig.Games[index] = form.Game;
-                _configService.Save(_appConfig);
+                SaveConfigWithDialog();
                 _gameMonitorService.UpdateGames(_appConfig.Games);
                 _loggingService.Info($"Game edited: {form.Game.Name}");
                 RefreshGameList();
@@ -309,14 +372,14 @@ public sealed class MainForm : Form
             return;
         }
 
-        var result = MessageBox.Show(this, $"Remove '{selected.Name}' from the game list?", "Remove Game", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+        var result = MessageBox.Show(this, $"Remove '{selected.Name}' from the game list? This does not delete local saves or cloud backups.", "Remove Game", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
         if (result != DialogResult.Yes)
         {
             return;
         }
 
         _appConfig.Games.RemoveAll(game => game.Id == selected.Id);
-        _configService.Save(_appConfig);
+        SaveConfigWithDialog();
         _gameMonitorService.UpdateGames(_appConfig.Games);
         _loggingService.Info($"Game removed: {selected.Name}");
         RefreshGameList();
@@ -336,18 +399,25 @@ public sealed class MainForm : Form
         }
 
         var columnName = _gamesGrid.Columns[e.ColumnIndex].Name;
-        if (columnName == BackupColumnName)
+        await SafeUiAsync(columnName, async () =>
         {
-            await BackupSelectedGameAsync(game);
-        }
-        else if (columnName == RestoreColumnName)
-        {
-            await RestoreSelectedGameAsync(game);
-        }
-        else if (columnName == OpenSaveFolderColumnName)
-        {
-            OpenSaveFolder(game);
-        }
+            if (columnName == BackupColumnName)
+            {
+                await BackupSelectedGameAsync(game);
+            }
+            else if (columnName == RestoreColumnName)
+            {
+                await RestoreSelectedGameAsync(game);
+            }
+            else if (columnName == HistoryColumnName)
+            {
+                ShowBackupHistory(game);
+            }
+            else if (columnName == OpenSaveFolderColumnName)
+            {
+                OpenSaveFolder(game);
+            }
+        });
     }
 
     private async Task BackupSelectedGameAsync(GameConfig game)
@@ -356,10 +426,10 @@ public sealed class MainForm : Form
         _gamesGrid.Enabled = false;
         try
         {
-            var result = await _backupService.BackupNowAsync(game, "manual");
+            var result = await _backupService.BackupNowAsync(game, "manual", _appCts.Token);
             if (result.Succeeded)
             {
-                _configService.Save(_appConfig);
+                SaveConfigWithDialog();
             }
 
             MessageBox.Show(this, result.Message, "Backup Now", MessageBoxButtons.OK, result.Succeeded ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
@@ -379,7 +449,7 @@ public sealed class MainForm : Form
         BackupMetadata? metadata;
         try
         {
-            metadata = await _backupService.ReadCloudMetadataAsync(game);
+            metadata = await _backupService.ReadCloudMetadataAsync(game, _appCts.Token);
         }
         finally
         {
@@ -387,7 +457,7 @@ public sealed class MainForm : Form
         }
 
         var metadataSummary = metadata is null
-            ? "Cloud metadata could not be read. You can still attempt restore if the latest backup exists."
+            ? "Cloud metadata could not be read. You can still attempt restore if the latest backup exists. This is the part where we squint at the abyss."
             : $"Cloud backup date: {metadata.LastBackupTime.LocalDateTime}\nSource device: {metadata.SourceDevice}\nBackup type: {metadata.BackupType}";
 
         var confirm = MessageBox.Show(
@@ -406,7 +476,7 @@ public sealed class MainForm : Form
         _gamesGrid.Enabled = false;
         try
         {
-            var result = await _backupService.RestoreFromCloudAsync(game);
+            var result = await _backupService.RestoreFromCloudAsync(game, _appCts.Token);
             MessageBox.Show(this, result.Message, "Restore from Cloud", MessageBoxButtons.OK, result.Succeeded ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         finally
@@ -417,6 +487,13 @@ public sealed class MainForm : Form
         }
     }
 
+    private void ShowBackupHistory(GameConfig game)
+    {
+        using var dialog = new BackupHistoryDialog(_backupService, game);
+        dialog.ShowDialog(this);
+        RefreshLogs();
+    }
+
     private void OpenSaveFolder(GameConfig game)
     {
         if (string.IsNullOrWhiteSpace(game.SavePath) || !Directory.Exists(game.SavePath))
@@ -425,36 +502,47 @@ public sealed class MainForm : Form
             return;
         }
 
-        try
+        OpenFolder(game.SavePath, "Open Save Folder");
+    }
+
+    private void ShowRcloneHelp()
+    {
+        var message =
+            "rclone setup quick path:\n\n" +
+            "1. Install rclone from https://rclone.org/downloads/\n" +
+            "2. Make sure `rclone version` works in a terminal.\n" +
+            "3. Run `rclone config` and create a remote, for example `gdrive`.\n" +
+            "4. Use only the remote name in this app, like `gdrive`.\n\n" +
+            "The README has the longer setup notes and examples.";
+
+        var result = MessageBox.Show(this, message + "\n\nOpen rclone downloads page?", "Rclone Setup Help", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+        if (result == DialogResult.Yes)
         {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = game.SavePath,
-                UseShellExecute = true
-            });
-        }
-        catch (Exception ex)
-        {
-            _loggingService.Error($"Failed to open save folder: {game.Name}", ex);
-            MessageBox.Show(this, $"Could not open save folder: {ex.Message}", "Open Save Folder", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            RefreshLogs();
+            OpenUrl("https://rclone.org/downloads/");
         }
     }
 
     private void GameMonitorServiceStateChanged(object? sender, GameMonitorStateChangedEventArgs e)
     {
-        if (IsDisposed)
+        if (IsDisposed || !IsHandleCreated)
         {
             return;
         }
 
         if (InvokeRequired)
         {
-            BeginInvoke(new Action(() => GameMonitorServiceStateChanged(sender, e)));
+            try
+            {
+                BeginInvoke(new Action(() => GameMonitorServiceStateChanged(sender, e)));
+            }
+            catch (ObjectDisposedException)
+            {
+                // App is closing. Let the gremlin sleep.
+            }
             return;
         }
 
-        _configService.Save(_appConfig);
+        SaveConfigWithDialog(showSuccess: false);
         RefreshGameList();
         RefreshLogs();
     }
@@ -472,21 +560,97 @@ public sealed class MainForm : Form
 
     private void RefreshGameList()
     {
+        var hasGames = _appConfig.Games.Count > 0;
+        _gamesGrid.Visible = hasGames;
+        _emptyStateLabel.Visible = !hasGames;
         _gamesGrid.DataSource = null;
         _gamesGrid.DataSource = _appConfig.Games.OrderBy(game => game.Name).ToList();
     }
 
     private void RefreshLogs()
     {
-        _logsList.Items.Clear();
-        foreach (var line in _loggingService.GetRecentLines(100))
-        {
-            _logsList.Items.Add(line);
-        }
+        var lines = _loggingService.GetRecentLines(300);
+        _logsTextBox.Text = lines.Count == 0
+            ? "No logs yet. Suspiciously peaceful."
+            : string.Join(Environment.NewLine, lines);
+        _logsTextBox.SelectionStart = _logsTextBox.TextLength;
+        _logsTextBox.ScrollToCaret();
+    }
 
-        if (_logsList.Items.Count > 0)
+    private void SaveConfigWithDialog(bool showSuccess = false)
+    {
+        try
         {
-            _logsList.TopIndex = _logsList.Items.Count - 1;
+            _configService.Save(_appConfig);
+            if (showSuccess)
+            {
+                MessageBox.Show(this, "Config saved.", "Config", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
         }
+        catch (Exception ex)
+        {
+            ShowError("Config", "Could not save config. Your current UI changes may not survive app restart.", ex);
+        }
+    }
+
+    private async Task SafeUiAsync(string title, Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (OperationCanceledException)
+        {
+            _loggingService.Info($"Canceled UI operation: {title}");
+            RefreshLogs();
+        }
+        catch (Exception ex)
+        {
+            _loggingService.Error($"UI operation failed: {title}", ex);
+            ShowError(title, "That operation failed. Details were written to the log.", ex);
+            RefreshLogs();
+        }
+    }
+
+    private void OpenFolder(string folderPath, string title)
+    {
+        try
+        {
+            Directory.CreateDirectory(folderPath);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = folderPath,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _loggingService.Error($"Failed to open folder: {folderPath}", ex);
+            ShowError(title, "Could not open folder.", ex);
+            RefreshLogs();
+        }
+    }
+
+    private void OpenUrl(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _loggingService.Error($"Failed to open URL: {url}", ex);
+            ShowError("Open URL", "Could not open the browser.", ex);
+            RefreshLogs();
+        }
+    }
+
+    private void ShowError(string title, string message, Exception ex)
+    {
+        MessageBox.Show(this, $"{message}\n\nDetails: {ex.Message}", title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 }

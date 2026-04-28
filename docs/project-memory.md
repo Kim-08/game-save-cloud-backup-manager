@@ -10,48 +10,69 @@ Game Save Cloud Backup Manager is a Windows desktop app that lets users add game
 - Initial MVP target is C# with WPF or WinForms.
 - Phase 1 selected WinForms for the MVP because it is simpler and maintainable for the first desktop shell.
 - Use rclone as the cloud engine.
-- Phase 2 added `RcloneService` for rclone detection, version checks, remote listing, remote validation, remote text reads, safe async command execution, and remote path building.
 - Do not directly integrate Google Drive, Dropbox, OneDrive, or other cloud provider APIs.
-- The app owns UI, game management, local JSON config, rclone command execution, cloud metadata, startup restore prompts, manual backup/restore, game monitoring, auto backup, final backup on close, logs, and error handling.
-- Manual backup and restore are implemented through `BackupService`. Backup uses `rclone copy` to both `latest/` and `versions/<TIMESTAMP>/`, then uploads `metadata.json` with `rclone copyto`. Restore reads metadata where available, requires UI confirmation, creates a local safety backup, then restores cloud `latest/` with `rclone copy`.
-- Startup cloud restore prompt is implemented. On app open, games with `startupRestorePrompt` enabled are checked once per app session by reading cloud `metadata.json`; if cloud metadata is newer than local save modified time, or the local save folder is missing, the app prompts Restore from Cloud / Keep Local Save / Ask Later. Prompt state is in-memory only.
-- Phase 5 added `GameMonitorService` for process monitoring and automatic backups. It derives the process name from `exePath`, checks every few seconds, updates runtime UI status, waits about one minute after game start before first auto backup, backs up every configured interval, and runs a final close backup after about five seconds when `backupOnClose` is enabled. It prevents overlapping backups per game.
+- The app must not store rclone credentials or cloud provider credentials; rclone owns auth/config.
 - Use `rclone copy` by default.
 - Do not use `rclone sync` by default.
 - Start with safe one-way backup and manual restore.
 - Store configuration under `%LOCALAPPDATA%`.
 - Current local config path is `%LOCALAPPDATA%/GameSaveCloudBackup/config.json`.
 - Current log path is `%LOCALAPPDATA%/GameSaveCloudBackup/Logs/app.log`.
-- The app checks rclone on startup with `rclone version` and lists remotes with `rclone listremotes`.
-- The app must not store rclone credentials or cloud provider credentials; rclone owns its own auth/config.
 - Local safety backups before restore are stored under `%LOCALAPPDATA%/GameSaveCloudBackup/SafetyBackups/`.
 - On startup, check cloud backup metadata and ask whether to restore if the cloud save is newer.
 - After the startup restore prompt, do not auto-restore again in the same session unless the user manually chooses Restore.
-- While a game is running, back up every 10 minutes by default.
-- When a game closes, perform one final backup.
+- While a game is running, back up every configured interval, defaulting to 10 minutes.
+- When a game closes, perform one final backup when enabled.
 
-## Open questions
+## Implemented phases
 
-- Should rclone be bundled, downloaded, or user-provided? Current Phase 2 assumption: user-provided rclone in PATH.
-- How should game process detection handle launchers that spawn another process?
-- Should versioned backups be implemented in MVP or after `latest/` works reliably?
+- Phase 1 added the WinForms shell, config service, logging service, game model, and basic game management.
+- Phase 2 added `RcloneService` for rclone detection, version checks, remote listing, remote validation, remote text reads, safe async command execution, and remote path building.
+- Phase 3 completed Add/Edit/Remove game management and exposed per-game actions.
+- Phase 4 added `BackupService`. Backup uses `rclone copy` to both `latest/` and `versions/<TIMESTAMP>/`, then uploads `metadata.json` with `rclone copyto`. Restore reads metadata where available, requires UI confirmation, creates a local safety backup, then restores cloud `latest/` with `rclone copy`.
+- Phase 4 also implemented startup cloud restore prompts. Games with `startupRestorePrompt` enabled are checked once per app session by reading cloud `metadata.json`; if cloud metadata is newer than local save modified time, or local saves are missing, the app prompts Restore from Cloud / Keep Local Save / Ask Later.
+- Phase 5 added `GameMonitorService` for process monitoring and automatic backups. It derives the process name from `exePath`, checks every few seconds, updates runtime UI status, waits about one minute after game start before first auto backup, backs up every configured interval, and runs a final close backup after about five seconds when `backupOnClose` is enabled. It prevents overlapping backups per game.
+- Phase 6 added polish/reliability/packaging: improved logs viewer, folder-opening buttons, rclone setup help, better Add/Edit validation, friendly empty state, backup history from cloud `versions/`, safe managed-version retention, config corruption backup, better logging resilience, rclone cancellation handling, Windows publish script, CI publish validation, and documentation cleanup.
+
+## MVP completion status
+
+MVP is complete for early users if rclone is user-installed and configured.
+
+Completion checklist:
+
+- Add/edit/remove games works.
+- rclone detection works.
+- Manual backup works.
+- Manual restore works.
+- Startup restore prompt works.
+- Game monitoring works.
+- Auto backup every interval works.
+- Final backup on game close works.
+- Logs work.
+- README explains setup and publishing.
+
+## Open questions / next work
+
+- Should rclone be bundled, downloaded, or remain user-provided? Current assumption: user-provided rclone in PATH.
+- How should game process detection handle launchers that spawn another process? Likely next step: optional process-name override.
+- Should restore support choosing an older versioned backup, not only `latest/`?
 - How should conflicts be displayed when local and cloud metadata disagree?
-- Should backup intervals be global, per-game, or both?
+- Should version retention have a dedicated global setting in addition to per-game `MaxVersionBackups`?
+- What distribution format is best: zip, MSIX, installer, winget, or GitHub Releases artifact?
 
 ## Future agent instructions
 
 Before modifying code in future sessions, read:
 
-1. `docs/current-state.md`
-2. `docs/roadmap.md`
-3. `docs/architecture.md`
-4. `docs/project-memory.md`
+1. `README.md`
+2. `docs/current-state.md`
+3. `docs/roadmap.md`
+4. `docs/architecture.md`
+5. `docs/project-memory.md`
 
 Then update `docs/current-state.md` and `docs/changelog.md` after meaningful changes.
 
-Phase 1 technology choice is resolved: WinForms. Future agents should keep the app simple unless a strong reason emerges to migrate UI frameworks.
-
-Phase 5 game monitoring and automatic backup is complete. Next recommended implementation phase is Phase 6: polish, packaging, and reliability. Keep restore and auto-backup behavior conservative; accidental save overwrites are not a charming genre.
+Keep restore and auto-backup behavior conservative; accidental save overwrites are not a charming genre.
 
 ## Notes
 

@@ -79,8 +79,45 @@ public sealed class RcloneService
         return result.Succeeded ? result.StandardOutput : null;
     }
 
+    public async Task<IReadOnlyList<string>> ListRemoteDirectories(string remotePath, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(remotePath))
+        {
+            return [];
+        }
+
+        var result = await RunRcloneCommandAsync($"lsf {QuoteArgument(remotePath)} --dirs-only", cancellationToken);
+        if (!result.Succeeded)
+        {
+            return [];
+        }
+
+        return result.StandardOutput
+            .Split([Environment.NewLine, "\n"], StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim().TrimEnd('/'))
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(line => line, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public async Task<RcloneCommandResult> DeleteRemoteDirectory(string remotePath, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(remotePath))
+        {
+            return RcloneCommandResult.Failed(string.Empty, "Remote path is required.");
+        }
+
+        return await RunRcloneCommandAsync($"purge {QuoteArgument(remotePath)}", cancellationToken);
+    }
+
     public async Task<RcloneCommandResult> RunRcloneCommandAsync(string arguments, CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(arguments))
+        {
+            return RcloneCommandResult.Failed(string.Empty, "rclone arguments are required.");
+        }
+
         var safeArguments = RedactSensitiveText(arguments);
         _loggingService.Info($"Starting rclone command: rclone {safeArguments}");
 
@@ -120,6 +157,21 @@ public sealed class RcloneService
             };
 
             process.Start();
+            using var cancellationRegistration = cancellationToken.Register(() =>
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                }
+                catch
+                {
+                    // Best effort. The command result below still reports cancellation.
+                }
+            });
+
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
@@ -134,6 +186,18 @@ public sealed class RcloneService
                 stopwatch.Elapsed);
 
             LogResult(result);
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            stopwatch.Stop();
+            var result = new RcloneCommandResult(
+                safeArguments,
+                -2,
+                stdout.ToString(),
+                "rclone command was canceled.",
+                stopwatch.Elapsed);
+            _loggingService.Info($"rclone command canceled: rclone {safeArguments}");
             return result;
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 2)
@@ -233,4 +297,6 @@ public sealed record RcloneCommandResult(
     TimeSpan Duration)
 {
     public bool Succeeded => ExitCode == 0;
+
+    public static RcloneCommandResult Failed(string arguments, string error) => new(arguments, -1, string.Empty, error, TimeSpan.Zero);
 }

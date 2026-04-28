@@ -1,12 +1,15 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using GameSaveCloudBackup.Models;
 
 namespace GameSaveCloudBackup.Services;
 
 public sealed class BackupService
 {
+    private static readonly Regex TimestampVersionPattern = new("^\\d{8}_\\d{6}$", RegexOptions.Compiled);
+
     private readonly RcloneService _rcloneService;
     private readonly LoggingService _loggingService;
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _operationLocks = new();
@@ -29,7 +32,7 @@ public sealed class BackupService
 
         try
         {
-            _loggingService.Info($"Manual backup started: {game.Name}");
+            _loggingService.Info($"{backupType} backup started: {game.Name}");
 
             var validation = await ValidateGameForRcloneOperationAsync(game, requireSaveFolder: true, cancellationToken);
             if (!validation.Succeeded)
@@ -42,8 +45,9 @@ public sealed class BackupService
                 return BackupOperationResult.Fail("Save folder is empty. Backup was rejected to avoid uploading an empty save set.");
             }
 
+            var versionTimestamp = CreateTimestamp();
             var latestRemotePath = _rcloneService.BuildRemotePath(game.RcloneRemote, game.CloudPath, "latest");
-            var versionRemotePath = _rcloneService.BuildRemotePath(game.RcloneRemote, game.CloudPath, $"versions/{CreateTimestamp()}");
+            var versionRemotePath = _rcloneService.BuildRemotePath(game.RcloneRemote, game.CloudPath, $"versions/{versionTimestamp}");
 
             var latestResult = await _rcloneService.RunRcloneCommandAsync(
                 $"copy {QuoteArgument(game.SavePath)} {QuoteArgument(latestRemotePath)} --create-empty-src-dirs",
@@ -69,13 +73,20 @@ public sealed class BackupService
                 return metadataResult;
             }
 
+            await PruneOldVersionBackupsAsync(game, cancellationToken);
+
             game.LastBackupTime = DateTimeOffset.Now;
-            _loggingService.Info($"Manual backup completed: {game.Name}; latest={latestRemotePath}; version={versionRemotePath}");
+            _loggingService.Info($"{backupType} backup completed: {game.Name}; latest={latestRemotePath}; version={versionRemotePath}");
             return BackupOperationResult.Ok("Backup completed successfully.", latestRemotePath);
+        }
+        catch (OperationCanceledException)
+        {
+            _loggingService.Info($"{backupType} backup canceled: {game.Name}");
+            return BackupOperationResult.Fail("Backup was canceled.");
         }
         catch (Exception ex)
         {
-            _loggingService.Error($"Manual backup failed: {game.Name}", ex);
+            _loggingService.Error($"{backupType} backup failed: {game.Name}", ex);
             return BackupOperationResult.Fail($"Backup failed: {ex.Message}");
         }
         finally
@@ -103,7 +114,6 @@ public sealed class BackupService
                 return validation;
             }
 
-            // TODO: Check whether the configured game process is running once process monitoring exists.
             _ = await ReadCloudMetadataAsync(game, cancellationToken);
 
             var safetyBackup = await CreateLocalSafetyBackupAsync(game, cancellationToken);
@@ -125,6 +135,11 @@ public sealed class BackupService
 
             _loggingService.Info($"Manual restore completed: {game.Name}; source={latestRemotePath}; safetyBackup={safetyBackup.OutputPath}");
             return BackupOperationResult.Ok("Restore completed successfully.", safetyBackup.OutputPath);
+        }
+        catch (OperationCanceledException)
+        {
+            _loggingService.Info($"Manual restore canceled: {game.Name}");
+            return BackupOperationResult.Fail("Restore was canceled.");
         }
         catch (Exception ex)
         {
@@ -160,11 +175,32 @@ public sealed class BackupService
             _loggingService.Info($"Safety backup created: {game.Name}; path={targetDirectory}");
             return BackupOperationResult.Ok("Safety backup created.", targetDirectory);
         }
+        catch (OperationCanceledException)
+        {
+            _loggingService.Info($"Safety backup canceled: {game.Name}");
+            return BackupOperationResult.Fail("Safety backup was canceled.");
+        }
         catch (Exception ex)
         {
             _loggingService.Error($"Failed to create safety backup: {game.Name}", ex);
             return BackupOperationResult.Fail($"Failed to create safety backup: {ex.Message}");
         }
+    }
+
+    public async Task<IReadOnlyList<BackupHistoryEntry>> GetBackupHistoryAsync(GameConfig game, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(game.RcloneRemote) || string.IsNullOrWhiteSpace(game.CloudPath))
+        {
+            return [];
+        }
+
+        var versionsRemotePath = _rcloneService.BuildRemotePath(game.RcloneRemote, game.CloudPath, "versions");
+        var versionNames = await _rcloneService.ListRemoteDirectories(versionsRemotePath, cancellationToken);
+        return versionNames
+            .Where(IsManagedVersionDirectory)
+            .Select(name => new BackupHistoryEntry(name, TryParseVersionTimestamp(name), _rcloneService.BuildRemotePath(game.RcloneRemote, game.CloudPath, $"versions/{name}")))
+            .OrderByDescending(entry => entry.CreatedAt ?? DateTimeOffset.MinValue)
+            .ToList();
     }
 
     public DateTimeOffset? GetLocalSaveLastModified(GameConfig game)
@@ -202,7 +238,15 @@ public sealed class BackupService
             return true;
         }
 
-        return !Directory.EnumerateFileSystemEntries(game.SavePath).Any();
+        try
+        {
+            return !Directory.EnumerateFileSystemEntries(game.SavePath).Any();
+        }
+        catch (Exception ex)
+        {
+            _loggingService.Error($"Failed to inspect save folder contents: {game.Name}", ex);
+            return true;
+        }
     }
 
     public string CreateMetadataFile(GameConfig game, string backupType)
@@ -267,6 +311,11 @@ public sealed class BackupService
             _loggingService.Info($"Cloud metadata read: {game.Name}; remote={metadataRemotePath}");
             return metadata;
         }
+        catch (OperationCanceledException)
+        {
+            _loggingService.Info($"Cloud metadata read canceled: {game.Name}");
+            return null;
+        }
         catch (Exception ex)
         {
             _loggingService.Error($"Failed to read cloud metadata: {game.Name}", ex);
@@ -286,9 +335,19 @@ public sealed class BackupService
             return BackupOperationResult.Fail("Rclone remote is required.");
         }
 
+        if (game.RcloneRemote.Contains(':'))
+        {
+            return BackupOperationResult.Fail("Rclone remote should be only the remote name, for example 'gdrive', not 'gdrive:folder'.");
+        }
+
         if (string.IsNullOrWhiteSpace(game.CloudPath))
         {
             return BackupOperationResult.Fail("Cloud backup folder is required.");
+        }
+
+        if (game.CloudPath.Contains(':'))
+        {
+            return BackupOperationResult.Fail("Cloud backup folder should not include the remote name or colon.");
         }
 
         if (string.IsNullOrWhiteSpace(game.SavePath))
@@ -314,6 +373,36 @@ public sealed class BackupService
         return BackupOperationResult.Ok("Validation passed.");
     }
 
+    private async Task PruneOldVersionBackupsAsync(GameConfig game, CancellationToken cancellationToken)
+    {
+        if (game.MaxVersionBackups <= 0)
+        {
+            _loggingService.Info($"Version retention disabled: {game.Name}");
+            return;
+        }
+
+        var history = await GetBackupHistoryAsync(game, cancellationToken);
+        var staleVersions = history.Skip(game.MaxVersionBackups).ToList();
+        foreach (var version in staleVersions)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!IsManagedVersionDirectory(version.Name))
+            {
+                continue;
+            }
+
+            var result = await _rcloneService.DeleteRemoteDirectory(version.RemotePath, cancellationToken);
+            if (result.Succeeded)
+            {
+                _loggingService.Info($"Pruned old versioned backup: {game.Name}; version={version.Name}");
+            }
+            else
+            {
+                _loggingService.Error($"Failed to prune old versioned backup: {game.Name}; version={version.Name}; {CleanError(result.StandardError)}");
+            }
+        }
+    }
+
     private static async Task CopyDirectoryAsync(string sourceDirectory, string targetDirectory, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(targetDirectory);
@@ -332,10 +421,22 @@ public sealed class BackupService
             var targetFile = Path.Combine(targetDirectory, relativePath);
             Directory.CreateDirectory(Path.GetDirectoryName(targetFile)!);
 
-            await using var sourceStream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 81920, useAsync: true);
+            await using var sourceStream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 81920, useAsync: true);
             await using var targetStream = new FileStream(targetFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
             await sourceStream.CopyToAsync(targetStream, cancellationToken);
         }
+    }
+
+    private static bool IsManagedVersionDirectory(string value)
+    {
+        return TimestampVersionPattern.IsMatch(value.Trim().TrimEnd('/'));
+    }
+
+    private static DateTimeOffset? TryParseVersionTimestamp(string value)
+    {
+        return DateTimeOffset.TryParseExact(value, "yyyyMMdd_HHmmss", null, System.Globalization.DateTimeStyles.AssumeLocal, out var parsed)
+            ? parsed
+            : null;
     }
 
     private static string QuoteArgument(string value)
@@ -375,6 +476,8 @@ public sealed class BackupService
         }
     }
 }
+
+public sealed record BackupHistoryEntry(string Name, DateTimeOffset? CreatedAt, string RemotePath);
 
 public sealed record BackupOperationResult(bool Succeeded, string Message, string? OutputPath = null)
 {

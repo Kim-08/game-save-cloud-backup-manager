@@ -14,6 +14,8 @@ public sealed class AddEditGameForm : Form
     private readonly CheckBox _autoBackupCheckBox = new() { Checked = true };
     private readonly NumericUpDown _backupIntervalInput = new() { Minimum = 1, Maximum = 1440, Value = 10 };
     private readonly CheckBox _backupOnCloseCheckBox = new() { Checked = true };
+    private readonly CheckBox _startupRestorePromptCheckBox = new() { Checked = true };
+    private readonly NumericUpDown _maxVersionsInput = new() { Minimum = 0, Maximum = 365, Value = 10 };
 
     public GameConfig Game { get; private set; }
 
@@ -23,9 +25,9 @@ public sealed class AddEditGameForm : Form
         Game = game is null ? new GameConfig() : Clone(game);
         Text = game is null ? "Add Game" : "Edit Game";
         StartPosition = FormStartPosition.CenterParent;
-        Width = 760;
-        Height = 430;
-        MinimumSize = new Size(700, 420);
+        Width = 800;
+        Height = 530;
+        MinimumSize = new Size(720, 500);
         BuildLayout();
         LoadRemotes(remotes ?? []);
         LoadGame();
@@ -38,12 +40,12 @@ public sealed class AddEditGameForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(16),
             ColumnCount = 3,
-            RowCount = 9,
+            RowCount = 12,
             AutoSize = true
         };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 125));
 
         AddTextRow(root, 0, "Game Name", _nameTextBox);
         AddBrowseRow(root, 1, "Game EXE/Launcher", _exePathTextBox, BrowseExe);
@@ -63,13 +65,31 @@ public sealed class AddEditGameForm : Form
         root.Controls.Add(_backupOnCloseCheckBox, 1, 7);
         root.SetColumnSpan(_backupOnCloseCheckBox, 2);
 
+        root.Controls.Add(new Label { Text = "Startup Restore Prompt", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 8);
+        root.Controls.Add(_startupRestorePromptCheckBox, 1, 8);
+        root.SetColumnSpan(_startupRestorePromptCheckBox, 2);
+
+        root.Controls.Add(new Label { Text = "Keep Versioned Backups", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 9);
+        root.Controls.Add(_maxVersionsInput, 1, 9);
+        root.SetColumnSpan(_maxVersionsInput, 2);
+
+        var helpText = new Label
+        {
+            Text = "Tip: Remote should be just the rclone name, like 'gdrive'. Cloud folder should be a folder path, like 'GameSaveBackups/Stardew Valley'. Set versions to 0 to keep all versioned backups.",
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            ForeColor = SystemColors.GrayText
+        };
+        root.Controls.Add(helpText, 0, 10);
+        root.SetColumnSpan(helpText, 3);
+
         var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill };
         var saveButton = new Button { Text = "Save", DialogResult = DialogResult.OK, Width = 90 };
         var cancelButton = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90 };
         saveButton.Click += (_, _) => ValidateAndSave();
         buttons.Controls.Add(saveButton);
         buttons.Controls.Add(cancelButton);
-        root.Controls.Add(buttons, 0, 8);
+        root.Controls.Add(buttons, 0, 11);
         root.SetColumnSpan(buttons, 3);
 
         AcceptButton = saveButton;
@@ -129,10 +149,16 @@ public sealed class AddEditGameForm : Form
 
     private async void TestRemote(object? sender, EventArgs e)
     {
-        var remoteName = _rcloneRemoteComboBox.Text.Trim();
+        var remoteName = _rcloneRemoteComboBox.Text.Trim().TrimEnd(':');
         if (string.IsNullOrWhiteSpace(remoteName))
         {
             MessageBox.Show(this, "Enter or select an rclone remote first.", "Rclone Remote", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        if (remoteName.Contains(':'))
+        {
+            MessageBox.Show(this, "Use only the remote name here, for example 'gdrive'. Put folders in Cloud Backup Folder.", "Rclone Remote", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -147,9 +173,13 @@ public sealed class AddEditGameForm : Form
         {
             var ok = await _rcloneService.TestRemote(remoteName);
             var message = ok
-                ? $"Remote '{remoteName.TrimEnd(':')}' is reachable."
-                : $"Remote '{remoteName.TrimEnd(':')}' could not be reached. Check rclone config, remote name, and cloud authentication.";
+                ? $"Remote '{remoteName}' is reachable. Tiny miracle, accept it."
+                : $"Remote '{remoteName}' could not be reached. Check rclone config, remote name, and cloud authentication.";
             MessageBox.Show(this, message, "Rclone Remote Test", MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Remote test failed: {ex.Message}", "Rclone Remote Test", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         finally
         {
@@ -176,25 +206,77 @@ public sealed class AddEditGameForm : Form
         _autoBackupCheckBox.Checked = Game.AutoBackup;
         _backupIntervalInput.Value = Math.Clamp(Game.BackupIntervalMinutes, 1, 1440);
         _backupOnCloseCheckBox.Checked = Game.BackupOnClose;
+        _startupRestorePromptCheckBox.Checked = Game.StartupRestorePrompt;
+        _maxVersionsInput.Value = Math.Clamp(Game.MaxVersionBackups, 0, 365);
     }
 
     private bool ValidateAndSave()
     {
-        if (string.IsNullOrWhiteSpace(_nameTextBox.Text))
+        var errors = new List<string>();
+        var name = _nameTextBox.Text.Trim();
+        var exePath = _exePathTextBox.Text.Trim();
+        var savePath = _savePathTextBox.Text.Trim();
+        var remote = _rcloneRemoteComboBox.Text.Trim().TrimEnd(':');
+        var cloudPath = _cloudPathTextBox.Text.Trim().Trim('/', '\\');
+
+        if (string.IsNullOrWhiteSpace(name))
         {
-            MessageBox.Show(this, "Game Name is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            errors.Add("Game Name is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(exePath))
+        {
+            errors.Add("Game EXE/Launcher is required for monitoring.");
+        }
+        else if (!File.Exists(exePath))
+        {
+            errors.Add("Game EXE/Launcher does not exist.");
+        }
+
+        if (string.IsNullOrWhiteSpace(savePath))
+        {
+            errors.Add("Save Folder is required.");
+        }
+        else if (!Directory.Exists(savePath))
+        {
+            errors.Add("Save Folder does not exist.");
+        }
+
+        if (string.IsNullOrWhiteSpace(remote))
+        {
+            errors.Add("Rclone Remote is required.");
+        }
+        else if (remote.Contains(':') || remote.Contains('/') || remote.Contains('\\'))
+        {
+            errors.Add("Rclone Remote should be only a remote name, like 'gdrive'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(cloudPath))
+        {
+            errors.Add("Cloud Backup Folder is required.");
+        }
+        else if (cloudPath.Contains(':'))
+        {
+            errors.Add("Cloud Backup Folder should not include the rclone remote name or colon.");
+        }
+
+        if (errors.Count > 0)
+        {
+            MessageBox.Show(this, string.Join(Environment.NewLine, errors), "Please fix these settings", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             DialogResult = DialogResult.None;
             return false;
         }
 
-        Game.Name = _nameTextBox.Text.Trim();
-        Game.ExePath = _exePathTextBox.Text.Trim();
-        Game.SavePath = _savePathTextBox.Text.Trim();
-        Game.RcloneRemote = _rcloneRemoteComboBox.Text.Trim().TrimEnd(':');
-        Game.CloudPath = _cloudPathTextBox.Text.Trim();
+        Game.Name = name;
+        Game.ExePath = exePath;
+        Game.SavePath = savePath;
+        Game.RcloneRemote = remote;
+        Game.CloudPath = cloudPath;
         Game.AutoBackup = _autoBackupCheckBox.Checked;
         Game.BackupIntervalMinutes = (int)_backupIntervalInput.Value;
         Game.BackupOnClose = _backupOnCloseCheckBox.Checked;
+        Game.StartupRestorePrompt = _startupRestorePromptCheckBox.Checked;
+        Game.MaxVersionBackups = (int)_maxVersionsInput.Value;
         return true;
     }
 

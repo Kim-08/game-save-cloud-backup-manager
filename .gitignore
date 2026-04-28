@@ -55,6 +55,7 @@ project.nuget.cache
 
 # Publish output
 publish/
+publish-check/
 artifacts/
 
 # Logs

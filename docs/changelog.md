@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-04-28 - Phase 6 polish, packaging, and reliability
+
+- Added a better in-app logs viewer with refresh, Open Logs Folder, and Open Config Folder buttons.
+- Added rclone setup help in the UI and expanded README setup/publish instructions.
+- Added friendly empty state when no games are configured.
+- Improved Add/Edit Game validation for EXE path, save folder, remote name, cloud folder, startup restore prompt, and version retention.
+- Added backup history display from managed timestamped cloud `versions/` folders.
+- Added safe retention for versioned backups: keep latest `MaxVersionBackups`, with `0` meaning keep all, and prune only app-managed timestamp folders.
+- Added corrupt config recovery by backing up invalid JSON to `config.bad.TIMESTAMP.json` and creating a fresh config.
+- Hardened logging so locked/unavailable log files do not crash the app.
+- Added defensive rclone cancellation handling, process-tree kill on cancellation, and sensitive argument redaction in logs.
+- Improved UI async error handling and app-level exception logging.
+- Ensured game monitoring and pending close backups are canceled during app shutdown.
+- Added `scripts/publish-windows.ps1` for Windows Release publish output.
+- Updated GitHub Actions with publish validation.
+- Updated README, current state, project memory, roadmap, Phase 6 docs, and risks.
+- Marked MVP complete for early local use.
+
 ## 2026-04-28 - Phase 5 game monitoring and automatic backup
 
 - Added `GameMonitorService` for process monitoring based on each game EXE/launcher path.

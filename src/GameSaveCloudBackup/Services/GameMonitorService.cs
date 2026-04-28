@@ -75,6 +75,18 @@ public sealed class GameMonitorService : IDisposable
             entry.RunningBackupCts?.Cancel();
         }
 
+        try
+        {
+            if (_monitorTask is { IsCompleted: false })
+            {
+                _monitorTask.Wait(TimeSpan.FromSeconds(2));
+            }
+        }
+        catch (Exception ex) when (ex is AggregateException or OperationCanceledException)
+        {
+            // Expected during shutdown. Background work has been asked to stop.
+        }
+
         _loggingService.Info("Game monitor stopped");
     }
 
@@ -151,11 +163,19 @@ public sealed class GameMonitorService : IDisposable
 
         if (entry.Game.BackupOnClose)
         {
+            var shutdownToken = _monitorCts?.Token ?? CancellationToken.None;
             _ = Task.Run(async () =>
             {
-                await Task.Delay(CloseBackupDelay);
-                await RunBackupIfAllowedAsync(entry, "close");
-            });
+                try
+                {
+                    await Task.Delay(CloseBackupDelay, shutdownToken);
+                    await RunBackupIfAllowedAsync(entry, "close", shutdownToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    _loggingService.Info($"close backup canceled: {entry.Game.Name}");
+                }
+            }, CancellationToken.None);
         }
     }
 

@@ -38,6 +38,37 @@ Status: completed.
 
 ## Phase 6: Polish, packaging, and reliability
 
-Improve UX, logs, validation, retry/backoff behavior, launcher process matching, settings, packaging, documentation, release workflow, and installer/distribution story.
+Improve UX, logs, validation, reliability, packaging, documentation, release workflow, and early-user readiness.
 
-Status: next recommended step.
+Status: completed.
+
+Completed highlights:
+
+- Better logs viewer and folder buttons.
+- Rclone setup help.
+- Better Add/Edit validation.
+- Friendly no-games empty state.
+- Backup history based on cloud `versions/` folder.
+- Safe retention for managed timestamped version backups.
+- Config corruption backup/recovery.
+- More defensive rclone execution and cancellation handling.
+- Windows publish script.
+- GitHub Actions build + publish validation.
+- README and documentation cleanup.
+
+## Phase 7: Post-MVP release hardening
+
+Recommended next step.
+
+Potential tasks:
+
+- Add installer or MSIX packaging.
+- Add GitHub Releases artifact upload.
+- Add optional launcher process-name override for games launched by Steam/Epic/etc.
+- Allow restoring from a selected versioned backup, not only `latest/`.
+- Add richer conflict detection and comparison UI.
+- Add settings screen for global defaults.
+- Consider system tray/start-minimized support after the shutdown/cancellation behavior has more real-world testing.
+- Add automated tests around path validation, retention selection, config corruption handling, and rclone argument building.
+
+Status: not started.

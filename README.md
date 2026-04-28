@@ -1,53 +1,104 @@
 # Game Save Cloud Backup Manager
 
-Game Save Cloud Backup Manager is a Windows desktop application for managing game save backups to cloud storage through [rclone](https://rclone.org/).
+Game Save Cloud Backup Manager is a Windows desktop app for backing up game saves to cloud storage through [rclone](https://rclone.org/). It lets users add games, point the app at each game EXE/launcher and save folder, choose an rclone remote and cloud folder, then run manual or automatic backups. No direct cloud credentials are stored by the app; rclone owns that tiny box of snakes.
 
-Users can add games, select each game's EXE or launcher, choose the save folder, choose an rclone remote and cloud folder, then run manual backups and restores. Automatic game-running backup is now implemented. The monster has been domesticated into a timer. This is probably fine.
+## MVP status
 
-## Current status
+**MVP complete.**
 
-Manual backup, manual restore, and startup cloud restore prompt are implemented.
+Completed MVP capabilities:
 
-The app currently supports:
-
-- C# / .NET 8 / WinForms desktop shell
-- Add/edit/remove game management
-- Local config file at `%LOCALAPPDATA%/GameSaveCloudBackup/config.json`
+- C# / .NET 8 / WinForms desktop app
+- Add, edit, and remove games
+- Better Add/Edit validation for EXE path, save folder, remote name, cloud folder, intervals, and retention
+- Friendly empty state when no games are configured
+- Local config at `%LOCALAPPDATA%/GameSaveCloudBackup/config.json`
+- Config corruption handling: invalid JSON is backed up as `config.bad.TIMESTAMP.json` and a fresh config is created
 - Local logs at `%LOCALAPPDATA%/GameSaveCloudBackup/Logs/app.log`
-- rclone availability check using `rclone version`
+- In-app logs viewer with refresh, Open Logs Folder, and Open Config Folder buttons
+- rclone detection using `rclone version`
 - rclone remote listing using `rclone listremotes`
+- rclone setup help button and README setup instructions
 - Remote validation helper
-- Remote text file read helper
-- Safe remote path builder
+- Remote metadata read helper
+- Defensive rclone command wrapper with logging, secret redaction, and cancellation handling
 - Manual Backup Now using `rclone copy`
-- Versioned backup copy using `rclone copy`
+- Versioned backup copy under `versions/TIMESTAMP/`
+- Backup history viewer based on the cloud `versions/` folder
+- Retention for managed timestamped version folders: keep latest `MaxVersionBackups`, or `0` to keep all
 - Metadata upload using `rclone copyto`
 - Manual Restore from Cloud using `rclone copy`
-- Startup cloud metadata check and restore prompt when cloud appears newer
-- Session-only prompt tracking so startup prompts are not repeated in the same app session
+- Local safety backup before restore at `%LOCALAPPDATA%/GameSaveCloudBackup/SafetyBackups/`
+- Startup cloud metadata check and restore prompt when the cloud backup appears newer
 - Game process monitoring from the configured EXE/launcher path
 - Running / Not Running UI status
 - Automatic backup after a game starts, then every configured interval
 - Final close backup when the game exits, if enabled
-- Per-game overlap protection so only one backup runs at a time
-- Local safety backup before restore at `%LOCALAPPDATA%/GameSaveCloudBackup/SafetyBackups/`
+- Per-game overlap protection so only one backup or restore runs at a time
+- Background monitor cancellation on app close
+- Windows GitHub Actions build and publish validation
+- Simple Windows publish script at `scripts/publish-windows.ps1`
 
-Not implemented yet:
+Not included in the MVP:
 
-- Packaging/release polish
-- Advanced reliability features
+- Installer/MSIX packaging
+- Bundled rclone binary
+- Advanced launcher child-process matching
+- System tray/start-minimized behavior
+- Conflict-resolution UI beyond restore prompts and safety backups
 
 ## Running locally
 
-Install the .NET 8 SDK on Windows, then run:
+Requirements:
+
+- Windows
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [rclone](https://rclone.org/downloads/) installed and available in PATH
+
+Run:
 
 ```bash
 dotnet run --project src/GameSaveCloudBackup/GameSaveCloudBackup.csproj
 ```
 
+## Publishing for Windows
+
+From PowerShell on Windows:
+
+```powershell
+./scripts/publish-windows.ps1
+```
+
+Default output:
+
+```text
+artifacts/publish/windows-win-x64/
+```
+
+Self-contained publish:
+
+```powershell
+./scripts/publish-windows.ps1 -SelfContained
+```
+
+Equivalent manual command:
+
+```bash
+dotnet publish src/GameSaveCloudBackup/GameSaveCloudBackup.csproj \
+  --configuration Release \
+  --runtime win-x64 \
+  --self-contained false \
+  --output artifacts/publish/windows-win-x64 \
+  -p:PublishSingleFile=true \
+  -p:IncludeNativeLibrariesForSelfExtract=true \
+  -p:EnableCompressionInSingleFile=true
+```
+
+Do not commit generated publish output. `artifacts/`, `publish/`, `bin/`, and `obj/` are ignored.
+
 ## rclone setup
 
-This app uses rclone as the cloud engine. It does not manage, store, or sync cloud credentials directly.
+This app uses rclone as the cloud engine. It does not manage, store, or sync cloud provider credentials directly.
 
 ### Install rclone
 
@@ -100,7 +151,11 @@ In the app, use remote name:
 gdrive
 ```
 
-The app does not store Google Drive, Dropbox, OneDrive, or other provider credentials. Those remain in rclone's own config.
+Do **not** put `gdrive:folder` in the remote field. Put only `gdrive` in **Rclone Remote**, then put the folder path in **Cloud Backup Folder**, for example:
+
+```text
+GameSaveBackups/Stardew Valley
+```
 
 ## Automatic backup while a game is running
 
@@ -119,11 +174,9 @@ Safety rules:
 
 - No backup runs if the save folder is missing.
 - No backup runs if the save folder is empty.
-- No overlapping backups run for the same game.
+- No overlapping backups or restores run for the same game.
 - Automatic backups use `BackupService.BackupNowAsync(game, "auto")`.
 - Close backups use `BackupService.BackupNowAsync(game, "close")`.
-
-Auto backup can be enabled or disabled per game in the Add/Edit Game window.
 
 ## Startup restore prompt
 
@@ -141,88 +194,11 @@ If metadata exists, the app compares the cloud backup date to the latest modifie
 
 Prompt choices:
 
-- **Restore from Cloud** — runs the same safe restore path, including local safety backup first.
+- **Restore from Cloud** — runs the safe restore path, including local safety backup first.
 - **Keep Local Save** — dismisses the startup prompt for this app session.
 - **Ask Later** — also dismisses the automatic startup prompt for this app session. Manual restore remains available.
 
-If rclone is missing, metadata is missing/invalid, or the cloud backup is older than/equal to local saves, the app logs the result and does not prompt. No drama. Rare, but appreciated.
-
-## Auto backup test
-
-1. Configure rclone and add a game with:
-   - Valid EXE path
-   - Non-empty save folder
-   - Valid rclone remote
-   - Cloud folder
-   - Auto Backup enabled
-   - Backup interval set to a small value for testing, such as 1 minute
-2. Start the configured game EXE.
-3. Confirm the game row changes to **Running**.
-4. Wait for the first automatic backup delay, then confirm files appear in `latest/`, `versions/<TIMESTAMP>/`, and `metadata.json`.
-5. Close the game.
-6. Confirm the row returns to **Not Running** and a final close backup is logged when Backup on Close is enabled.
-
-## Manual backup test
-
-1. Create or choose a small local test save folder with at least one file.
-2. Configure a game in the app:
-   - Game Name: `Stardew Valley` or any test name
-   - Save Folder: your test save folder
-   - Rclone Remote: `gdrive` or your configured remote
-   - Cloud Backup Folder: `GameSaveBackups/Stardew Valley`
-3. Click **Backup Now**.
-4. Confirm files appear in:
-
-```text
-gdrive:GameSaveBackups/Stardew Valley/latest
-gdrive:GameSaveBackups/Stardew Valley/versions/<TIMESTAMP>
-gdrive:GameSaveBackups/Stardew Valley/metadata.json
-```
-
-Equivalent inspection commands:
-
-```bash
-rclone lsf "gdrive:GameSaveBackups/Stardew Valley/latest"
-rclone lsf "gdrive:GameSaveBackups/Stardew Valley/versions"
-rclone cat "gdrive:GameSaveBackups/Stardew Valley/metadata.json"
-```
-
-## Manual restore test
-
-1. Make sure a backup exists in `<remote>:<cloudPath>/latest`.
-2. Select the configured game in the app.
-3. Click **Restore from Cloud**.
-4. Review the confirmation dialog showing metadata when available.
-5. Confirm restore.
-6. The app first creates a local safety backup under:
-
-```text
-%LOCALAPPDATA%/GameSaveCloudBackup/SafetyBackups/GameName/before_restore_TIMESTAMP/
-```
-
-7. Then it restores cloud latest files into the configured local save folder.
-
-## Documentation
-
-- [Documentation index](docs/index.md)
-- [Product plan](docs/product-plan.md)
-- [Architecture](docs/architecture.md)
-- [Roadmap](docs/roadmap.md)
-- [Current state](docs/current-state.md)
-- [Project memory](docs/project-memory.md)
-- [Changelog](docs/changelog.md)
-- [Risks](docs/risks.md)
-- [rclone research](docs/research-rclone.md)
-
-## Important design choices
-
-- Use rclone as the cloud engine.
-- Do not directly integrate Google Drive, Dropbox, OneDrive, or other cloud provider APIs.
-- Use `rclone copy` by default.
-- Do not use `rclone sync` by default.
-- Start with safe one-way backup and manual restore.
-- Store app configuration under `%LOCALAPPDATA%`.
-- Always create a local safety backup before manual restore.
+If rclone is missing, metadata is missing/invalid, or the cloud backup is older than/equal to local saves, the app logs the result and does not prompt.
 
 ## Cloud folder structure
 
@@ -255,3 +231,56 @@ gdrive:GameSaveBackups/Stardew Valley/latest
 gdrive:GameSaveBackups/Stardew Valley/versions/20260428_103000
 gdrive:GameSaveBackups/Stardew Valley/metadata.json
 ```
+
+## Manual backup test
+
+1. Create or choose a small local test save folder with at least one file.
+2. Configure a game in the app:
+   - Game Name: `Stardew Valley` or any test name
+   - Game EXE/Launcher: a real executable path
+   - Save Folder: your test save folder
+   - Rclone Remote: `gdrive` or your configured remote
+   - Cloud Backup Folder: `GameSaveBackups/Stardew Valley`
+3. Click **Backup Now**.
+4. Confirm files appear in:
+
+```text
+gdrive:GameSaveBackups/Stardew Valley/latest
+gdrive:GameSaveBackups/Stardew Valley/versions/<TIMESTAMP>
+gdrive:GameSaveBackups/Stardew Valley/metadata.json
+```
+
+Equivalent inspection commands:
+
+```bash
+rclone lsf "gdrive:GameSaveBackups/Stardew Valley/latest"
+rclone lsf "gdrive:GameSaveBackups/Stardew Valley/versions"
+rclone cat "gdrive:GameSaveBackups/Stardew Valley/metadata.json"
+```
+
+## Manual restore test
+
+1. Make sure a backup exists in `<remote>:<cloudPath>/latest`.
+2. Select the configured game in the app.
+3. Click **Restore**.
+4. Review the confirmation dialog showing metadata when available.
+5. Confirm restore.
+6. The app first creates a local safety backup under:
+
+```text
+%LOCALAPPDATA%/GameSaveCloudBackup/SafetyBackups/GameName/before_restore_TIMESTAMP/
+```
+
+7. Then it restores cloud latest files into the configured local save folder.
+
+## Documentation
+
+- [Documentation index](docs/index.md)
+- [Product plan](docs/product-plan.md)
+- [Architecture](docs/architecture.md)
+- [Roadmap](docs/roadmap.md)
+- [Current state](docs/current-state.md)
+- [Project memory](docs/project-memory.md)
+- [Changelog](docs/changelog.md)
+- [Risks](docs/risks.md)
+- [rclone research](docs/research-rclone.md)

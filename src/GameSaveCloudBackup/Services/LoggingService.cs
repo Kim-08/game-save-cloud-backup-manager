@@ -32,10 +32,24 @@ public sealed class LoggingService
                 return [];
             }
 
-            return File.ReadLines(LogFilePath).TakeLast(maxLines).ToList();
+            using var stream = new FileStream(LogFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            var lines = new Queue<string>(Math.Max(1, maxLines));
+            while (reader.ReadLine() is { } line)
+            {
+                lines.Enqueue(line);
+                while (lines.Count > maxLines)
+                {
+                    lines.Dequeue();
+                }
+            }
+
+            return lines.ToList();
         }
         catch
         {
+            // Logs are diagnostic, not load-bearing. If another process locks the file,
+            // keep the UI alive and try again on the next refresh.
             return [];
         }
     }
@@ -43,10 +57,19 @@ public sealed class LoggingService
     private void Write(string level, string message)
     {
         var line = $"{DateTimeOffset.Now:O} [{level}] {message}";
-        lock (_lock)
+        try
         {
-            Directory.CreateDirectory(LogDirectory);
-            File.AppendAllText(LogFilePath, line + Environment.NewLine);
+            lock (_lock)
+            {
+                Directory.CreateDirectory(LogDirectory);
+                using var stream = new FileStream(LogFilePath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+                using var writer = new StreamWriter(stream);
+                writer.WriteLine(line);
+            }
+        }
+        catch
+        {
+            // Never let logging crash the app. That would be very funny in the wrong way.
         }
     }
 }
