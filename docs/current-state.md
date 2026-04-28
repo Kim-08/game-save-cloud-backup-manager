@@ -17,13 +17,13 @@
 - Manual backup copies saves to `latest/`, creates a versioned backup under `versions/TIMESTAMP/`, uploads `metadata.json`, and optionally prunes older managed timestamped versions beyond the configured retention count.
 - Backup history is displayed by listing managed timestamped folders under the cloud `versions/` folder.
 - Manual restore checks the configured game process before confirmation and again inside the restore path; if the game appears to be running, restore is blocked with "Please close the game before restoring." It then reads cloud metadata when available, asks for confirmation, creates a local safety backup, and restores `latest/` with `rclone copy`.
-- Startup cloud restore prompt is implemented and session-scoped.
+- Startup cloud restore prompt is implemented and session-scoped. If a startup restore would be offered while the configured game process is running, the app shows "Please close the game before restoring." and skips that startup restore attempt for the session; the service-level restore guard also remains in place.
 - `GameMonitorService` monitors configured games by deriving the process name from `exePath` and checking every few seconds.
 - When a game starts, the app logs it, waits about one minute, then runs automatic backups every configured interval while the game remains running.
 - When a game closes, the app logs it, waits about five seconds, then runs one final close backup if `backupOnClose` is enabled and monitoring has not been stopped.
 - Automatic backup calls `BackupService.BackupNowAsync(game, "auto")`.
-- Final close backup calls `BackupService.BackupNowAsync(game, "close")`.
-- Per-game overlap protection prevents simultaneous backups/restores for the same game, and app shutdown cancels pending auto-backup and close-backup delays.
+- Final close backup calls `BackupService.BackupNowAsync(game, "close")` with the close-backup cancellation token.
+- Per-game overlap protection prevents simultaneous backups/restores for the same game, and app shutdown cancels pending auto-backup and close-backup delays before they can start new close backups.
 - Rclone command wrapper uses `ProcessStartInfo.ArgumentList` instead of shell-style command strings, redacts sensitive CLI arguments in logs, handles cancellation by killing the rclone process tree, and returns friendly failure results.
 - The app does not store rclone credentials or cloud provider credentials.
 - GitHub Actions build workflow exists for Windows and includes publish validation.

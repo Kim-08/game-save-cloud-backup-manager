@@ -42,7 +42,7 @@ Completed MVP capabilities:
 - Retention for managed timestamped version folders: keep latest `MaxVersionBackups`, or `0` to keep all
 - Metadata upload using `rclone copyto`
 - Manual Restore from Cloud using `rclone copy`
-- Restore is blocked with "Please close the game before restoring." when the configured game process appears to be running
+- Manual and startup restore are blocked with "Please close the game before restoring." when the configured game process appears to be running
 - Local safety backup before restore at `%LOCALAPPDATA%/GameSaveCloudBackup/SafetyBackups/`
 - Startup cloud metadata check and restore prompt when the cloud backup appears newer
 - Game process monitoring from the configured EXE/launcher path
@@ -190,9 +190,9 @@ Safety rules:
 - No backup runs if the save folder is missing.
 - No backup runs if the save folder is empty.
 - No overlapping backups or restores run for the same game.
-- Restore is blocked if the configured game process is running, with the friendly message: "Please close the game before restoring."
+- Manual restore and startup restore are blocked if the configured game process is running, with the friendly message: "Please close the game before restoring."
 - Automatic backups use `BackupService.BackupNowAsync(game, "auto")`.
-- Close backups use `BackupService.BackupNowAsync(game, "close")`.
+- Close backups use `BackupService.BackupNowAsync(game, "close")` and receive the monitor cancellation token.
 
 ## Startup restore prompt
 
@@ -214,7 +214,7 @@ Prompt choices:
 - **Keep Local Save** — dismisses the startup prompt for this app session.
 - **Ask Later** — also dismisses the automatic startup prompt for this app session. Manual restore remains available.
 
-If rclone is missing, metadata is missing/invalid, or the cloud backup is older than/equal to local saves, the app logs the result and does not prompt.
+If the configured game process is already running when a startup restore would be offered, the app shows "Please close the game before restoring." and skips that startup restore attempt for the session. If rclone is missing, metadata is missing/invalid, or the cloud backup is older than/equal to local saves, the app logs the result and does not prompt.
 
 ## Cloud folder structure
 

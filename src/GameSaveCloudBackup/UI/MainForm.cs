@@ -385,6 +385,20 @@ public sealed class MainForm : Form
         }
 
         _startupRestorePromptedGameIds.Add(game.Id);
+
+        var closedCheck = _backupService.VerifyGameIsClosedForRestore(game);
+        if (!closedCheck.Succeeded)
+        {
+            MessageBox.Show(
+                this,
+                closedCheck.Message,
+                "Startup Restore",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            RefreshLogs();
+            return;
+        }
+
         using var dialog = new RestorePromptDialog(game, metadata, localSaveDate);
         _ = dialog.ShowDialog(this);
 

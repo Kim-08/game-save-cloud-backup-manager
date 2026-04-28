@@ -192,7 +192,7 @@ public sealed class GameMonitorService : IDisposable
         try
         {
             await Task.Delay(CloseBackupDelay, closeBackupCts.Token);
-            if (_isStopping || closeBackupCts.Token.IsCancellationRequested)
+            if (ShouldSkipCloseBackup(entry, closeBackupCts))
             {
                 _loggingService.Info($"close backup skipped because monitoring is stopped: {entry.Game.Name}");
                 return;
@@ -253,7 +253,7 @@ public sealed class GameMonitorService : IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (_isStopping && string.Equals(backupType, "close", StringComparison.OrdinalIgnoreCase))
+        if (ShouldSkipBackupBecauseMonitoringStopped(backupType, cancellationToken))
         {
             _loggingService.Info($"close backup skipped because monitoring is stopped: {entry.Game.Name}");
             return;
@@ -273,6 +273,12 @@ public sealed class GameMonitorService : IDisposable
         ApplyStateToGame(entry, entry.IsRunning ? "Running" : "Not Running");
         try
         {
+            if (ShouldSkipBackupBecauseMonitoringStopped(backupType, cancellationToken))
+            {
+                _loggingService.Info($"close backup skipped because monitoring is stopped: {entry.Game.Name}");
+                return;
+            }
+
             if (!_backupService.IsSaveFolderValid(entry.Game))
             {
                 _loggingService.Error($"{backupType} backup skipped because save folder is missing: {entry.Game.Name}");
@@ -313,6 +319,25 @@ public sealed class GameMonitorService : IDisposable
 
             ApplyStateToGame(entry, entry.IsRunning ? "Running" : "Not Running");
         }
+    }
+
+    private bool ShouldSkipCloseBackup(MonitorEntry entry, CancellationTokenSource closeBackupCts)
+    {
+        if (ShouldSkipBackupBecauseMonitoringStopped("close", closeBackupCts.Token))
+        {
+            return true;
+        }
+
+        lock (entry.SyncRoot)
+        {
+            return !ReferenceEquals(entry.PendingCloseBackupCts, closeBackupCts);
+        }
+    }
+
+    private bool ShouldSkipBackupBecauseMonitoringStopped(string backupType, CancellationToken cancellationToken)
+    {
+        return string.Equals(backupType, "close", StringComparison.OrdinalIgnoreCase) &&
+            (_isStopping || cancellationToken.IsCancellationRequested || _monitorCts?.IsCancellationRequested == true);
     }
 
     private bool IsGameProcessRunning(MonitorEntry entry)

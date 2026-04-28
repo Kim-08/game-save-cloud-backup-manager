@@ -51,6 +51,8 @@ Completed highlights:
 - Backup history based on cloud `versions/` folder.
 - Safe retention for managed timestamped version backups.
 - Config corruption rename/recovery to `config.corrupt.TIMESTAMP.json` with a fresh clean config.
+- Manual restore and startup restore blocking when the configured game process is running.
+- Close-backup cancellation that avoids starting delayed final backups after monitoring stops.
 - More defensive rclone execution and cancellation handling.
 - Windows publish script.
 - GitHub Actions build + publish validation.

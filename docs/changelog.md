@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-04-28 - Phase 6 reliability implementation mismatch fix
+
+- Verified `main` matched `origin/main` before changes and confirmed the previous Phase 6 commit was already pushed.
+- Kept `GameSaveCloudBackup.csproj` valid XML and `.github/workflows/build.yml` valid YAML.
+- Updated README and docs so they describe the actual app state instead of overclaiming behavior.
+- Blocked startup restore prompts when the configured game process is already running and shows: "Please close the game before restoring."
+- Kept the service-level restore guard so manual restore and startup restore both fail safely if the game starts running before restore execution.
+- Hardened close-backup shutdown checks so a delayed close backup is skipped if monitoring has stopped, the app is closing, or a newer close-backup cancellation source replaced it.
+- Re-checked C# source formatting/readability while preserving normal C# style.
+
 ## 2026-04-28 - Phase 6 reliability and formatting pass
 
 - Reformatted C# source for more readable multi-line method calls, grid column definitions, and long messages.
