@@ -46,4 +46,4 @@ The app may close while rclone is running. Mitigation: cancellation is propagate
 
 ## Packaging assumptions
 
-The publish script creates app binaries but not an installer and does not bundle rclone. Mitigation: README explicitly states rclone must be installed and available in PATH on the target machine.
+The publish script creates app binaries but not an installer. It bundles rclone into `tools/rclone/rclone.exe` by default and falls back to PATH only when the bundled executable is missing. Mitigation: README documents bundled rclone, app-owned rclone config, and the `-SkipRcloneBundle` escape hatch.

@@ -118,21 +118,25 @@ public sealed class MainForm : Form
         root.Controls.Add(header, 0, 0);
 
         var rclonePanel = new GroupBox { Text = "Rclone Status", Dock = DockStyle.Fill };
-        var rcloneLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3 };
+        var rcloneLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4 };
         rcloneLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        rcloneLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 155));
         rcloneLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
         rcloneLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
         _rcloneStatusLabel.Text = "Checking rclone availability...";
         _rcloneStatusLabel.Dock = DockStyle.Fill;
         _rcloneStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
         _rcloneStatusLabel.Padding = new Padding(10, 0, 0, 0);
+        var configureRcloneButton = new Button { Text = "Configure Rclone", Dock = DockStyle.Fill };
+        configureRcloneButton.Click += (_, _) => ConfigureRclone();
         var refreshRcloneButton = new Button { Text = "Refresh Rclone", Dock = DockStyle.Fill };
         refreshRcloneButton.Click += async (_, _) => await SafeUiAsync("Refresh Rclone", RefreshRcloneStatusAsync);
         var rcloneHelpButton = new Button { Text = "Rclone Setup Help", Dock = DockStyle.Fill };
         rcloneHelpButton.Click += (_, _) => ShowRcloneHelp();
         rcloneLayout.Controls.Add(_rcloneStatusLabel, 0, 0);
-        rcloneLayout.Controls.Add(refreshRcloneButton, 1, 0);
-        rcloneLayout.Controls.Add(rcloneHelpButton, 2, 0);
+        rcloneLayout.Controls.Add(configureRcloneButton, 1, 0);
+        rcloneLayout.Controls.Add(refreshRcloneButton, 2, 0);
+        rcloneLayout.Controls.Add(rcloneHelpButton, 3, 0);
         rclonePanel.Controls.Add(rcloneLayout);
         root.Controls.Add(rclonePanel, 0, 1);
 
@@ -311,17 +315,23 @@ public sealed class MainForm : Form
         {
             _rcloneRemotes = [];
             _rcloneStatusLabel.Text =
-                "Missing: rclone is not installed or is not available in PATH. " +
-                "Install rclone, run `rclone config`, then refresh.";
+                "Missing: rclone was not found. Bundle rclone with the app or install it in PATH, then refresh." +
+                $"{Environment.NewLine}Config: {_rcloneService.RcloneConfigPath}";
             RefreshLogs();
             return;
         }
 
         _rcloneRemotes = await _rcloneService.ListRemotes(_appCts.Token);
         var remoteSummary = _rcloneRemotes.Count == 0
-            ? "No configured remotes found. Run `rclone config` to create one, for example `gdrive`."
+            ? "No configured remotes found. Click Configure Rclone to create one, for example `gdrive`."
             : $"{_rcloneRemotes.Count} remote(s): {string.Join(", ", _rcloneRemotes)}";
-        _rcloneStatusLabel.Text = $"Installed: {version}{Environment.NewLine}{remoteSummary}";
+        var rcloneSource = _rcloneService.IsUsingBundledRclone
+            ? "bundled"
+            : "PATH fallback";
+        _rcloneStatusLabel.Text =
+            $"Installed ({rcloneSource}): {version}{Environment.NewLine}" +
+            $"{remoteSummary}{Environment.NewLine}" +
+            $"Config: {_rcloneService.RcloneConfigPath}";
         RefreshLogs();
     }
 
@@ -335,7 +345,7 @@ public sealed class MainForm : Form
         var rcloneVersion = await _rcloneService.GetRcloneVersion(_appCts.Token);
         if (string.IsNullOrWhiteSpace(rcloneVersion))
         {
-            _loggingService.Info("Startup restore checks skipped because rclone is missing or not available in PATH.");
+            _loggingService.Info("Startup restore checks skipped because rclone is missing. Bundle rclone or install it in PATH.");
             RefreshLogs();
             return;
         }
@@ -649,10 +659,11 @@ public sealed class MainForm : Form
     {
         var message =
             "rclone setup quick path:\n\n" +
-            "1. Install rclone from https://rclone.org/downloads/\n" +
-            "2. Make sure `rclone version` works in a terminal.\n" +
-            "3. Run `rclone config` and create a remote, for example `gdrive`.\n" +
-            "4. Use only the remote name in this app, like `gdrive`.\n\n" +
+            "1. Use the bundled rclone that ships with the app, or install rclone separately as a fallback.\n" +
+            "2. Click Configure Rclone and create a remote, for example gdrive.\n" +
+            "3. Close the console window when configuration is finished.\n" +
+            "4. Click Refresh Rclone, then use only the remote name in this app, like gdrive.\n\n" +
+            $"Config file: {_rcloneService.RcloneConfigPath}\n\n" +
             "The README has the longer setup notes and examples.";
 
         var result = MessageBox.Show(
@@ -665,6 +676,29 @@ public sealed class MainForm : Form
         {
             OpenUrl("https://rclone.org/downloads/");
         }
+    }
+
+    private void ConfigureRclone()
+    {
+        if (!_rcloneService.OpenRcloneConfig())
+        {
+            MessageBox.Show(
+                this,
+                "Could not start rclone config. Make sure bundled rclone exists or rclone is installed in PATH.",
+                "Configure Rclone",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            RefreshLogs();
+            return;
+        }
+
+        MessageBox.Show(
+            this,
+            "A console window opened for rclone config. Create or edit your remote there, close the console when done, then click Refresh Rclone.",
+            "Configure Rclone",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+        RefreshLogs();
     }
 
     private void GameMonitorServiceStateChanged(object? sender, GameMonitorStateChangedEventArgs e)

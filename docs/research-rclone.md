@@ -6,9 +6,9 @@ rclone supports many cloud providers behind one command-line interface. This avo
 
 The app should not store cloud provider credentials. rclone owns provider authentication and stores its own config separately.
 
-## Install rclone
+## Provide rclone
 
-Download rclone from:
+Published app builds bundle rclone under `tools/rclone/rclone.exe`. Local development can also use a PATH-installed rclone downloaded from:
 
 <https://rclone.org/downloads/>
 
@@ -18,7 +18,7 @@ Verify installation:
 rclone version
 ```
 
-If the command fails, rclone is either not installed or not available in PATH. Naturally, PATH is where good intentions go to be eaten by environment variables.
+If the command fails during local development, rclone is either not installed or not available in PATH.
 
 ## Configure rclone
 

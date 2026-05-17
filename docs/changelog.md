@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-05-17 - Bundled rclone and in-app setup
+
+- Made `RcloneService` prefer bundled `tools/rclone/rclone.exe`, with PATH fallback for development.
+- Added an app-owned rclone config at `%APPDATA%/GameSaveCloudBackup/rclone/rclone.conf` via `RCLONE_CONFIG`.
+- Added a Configure Rclone UI action that opens `rclone config` in a console using the app config file.
+- Updated the Windows publish script to download and bundle rclone by default, with `-RcloneVersion` and `-SkipRcloneBundle` options.
+- Updated README and project docs for bundled rclone behavior.
+
 ## 2026-04-28 - Phase 6 reliability implementation mismatch fix
 
 - Verified `main` matched `origin/main` before changes and confirmed the previous Phase 6 commit was already pushed.

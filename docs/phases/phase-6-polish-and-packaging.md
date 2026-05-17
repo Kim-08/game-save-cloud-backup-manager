@@ -25,13 +25,13 @@ Completed.
 - Improved async UI error handling for backup, restore, rclone refresh, and history operations.
 - Ensured background monitoring is canceled/stopped during app close.
 - Added `scripts/publish-windows.ps1` for Release Windows publish output.
+- Added bundled rclone publishing and in-app rclone configuration using an app-owned config file.
 - Updated GitHub Actions to build and validate publish output.
 - Updated README, current state, project memory, changelog, roadmap, and risks.
 
 ## Explicitly deferred
 
 - Installer/MSIX packaging.
-- Bundling or downloading rclone.
 - App icon placeholder.
 - Start minimized/system tray support.
 - Advanced launcher child-process matching.

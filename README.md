@@ -30,9 +30,10 @@ Completed MVP capabilities:
 - More reliable config writes using temporary files and overwrite moves
 - Local logs at `%LOCALAPPDATA%/GameSaveCloudBackup/Logs/app.log`
 - In-app logs viewer with refresh, Open Logs Folder, and Open Config Folder buttons
-- rclone detection using `rclone version`
+- rclone detection using bundled `tools/rclone/rclone.exe` first, with PATH fallback
 - rclone remote listing using `rclone listremotes`
-- rclone setup help button and README setup instructions
+- Configure Rclone button, rclone setup help button, and README setup instructions
+- App-owned rclone config at `%APPDATA%/GameSaveCloudBackup/rclone/rclone.conf`
 - Remote validation helper
 - Remote metadata read helper
 - Defensive rclone command wrapper with argument-list execution, logging, secret redaction, and cancellation handling
@@ -52,12 +53,11 @@ Completed MVP capabilities:
 - Per-game overlap protection so only one backup or restore runs at a time
 - Background monitor cancellation on app close
 - Windows GitHub Actions build and publish validation
-- Simple Windows publish script at `scripts/publish-windows.ps1`
+- Simple Windows publish script at `scripts/publish-windows.ps1` that bundles rclone by default
 
 Not included in the MVP:
 
 - Installer/MSIX packaging
-- Bundled rclone binary
 - Advanced launcher child-process matching
 - System tray/start-minimized behavior
 - Conflict-resolution UI beyond restore prompts and safety backups
@@ -68,7 +68,7 @@ Requirements:
 
 - Windows
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [rclone](https://rclone.org/downloads/) installed and available in PATH
+- [rclone](https://rclone.org/downloads/) installed and available in PATH for local `dotnet run`, unless you place `rclone.exe` at `tools/rclone/rclone.exe` beside the built app
 
 Run:
 
@@ -96,6 +96,14 @@ Self-contained publish:
 ./scripts/publish-windows.ps1 -SelfContained
 ```
 
+The publish script downloads the official Windows rclone archive and copies `rclone.exe` into:
+
+```text
+artifacts/publish/windows-win-x64/tools/rclone/rclone.exe
+```
+
+Use `-RcloneVersion v1.70.3` to pin a specific rclone release, or `-SkipRcloneBundle` if you intentionally want target machines to provide rclone in PATH.
+
 Equivalent manual command:
 
 ```bash
@@ -113,29 +121,29 @@ Do not commit generated publish output. `artifacts/`, `publish/`, `bin/`, and `o
 
 ## rclone setup
 
-This app uses rclone as the cloud engine. It does not manage, store, or sync cloud provider credentials directly.
+This app uses rclone as the cloud engine. Published builds include a bundled `rclone.exe`, and the app stores rclone config in an app-owned file:
 
-### Install rclone
+```text
+%APPDATA%\GameSaveCloudBackup\rclone\rclone.conf
+```
 
-Download and install rclone from:
+The app does not manage, store, or sync cloud provider credentials directly. rclone owns provider authentication and token storage inside that config file.
 
-<https://rclone.org/downloads/>
+### Configure rclone inside the app
 
-After installation, make sure `rclone` is available in your PATH:
+1. Open the app.
+2. Click **Configure Rclone**.
+3. In the console window, create a remote, for example `gdrive`.
+4. Close the console when finished.
+5. Click **Refresh Rclone**.
+
+### PATH fallback
+
+If the bundled `tools/rclone/rclone.exe` is missing, the app falls back to `rclone` in PATH. That is mainly useful for development:
 
 ```bash
 rclone version
 ```
-
-### Configure rclone
-
-Run:
-
-```bash
-rclone config
-```
-
-Follow the prompts to create a cloud remote.
 
 ### Example: Google Drive remote
 

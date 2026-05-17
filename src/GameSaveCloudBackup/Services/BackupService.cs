@@ -403,7 +403,7 @@ public sealed class BackupService
 
         if (!await _rcloneService.CheckRcloneInstalled(cancellationToken))
         {
-            return BackupOperationResult.Fail("rclone is not installed or is not available in PATH.");
+            return BackupOperationResult.Fail("rclone was not found. Bundle rclone with the app or install it in PATH.");
         }
 
         if (!await _rcloneService.TestRemote(game.RcloneRemote, cancellationToken))

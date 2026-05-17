@@ -34,11 +34,12 @@ Game Save Cloud Backup Manager is a Windows desktop app that lets users add game
 - Phase 5 added `GameMonitorService` for process monitoring and automatic backups. It derives the process name from `exePath`, checks every few seconds, updates runtime UI status, waits about one minute after game start before first auto backup, backs up every configured interval, and runs a final close backup after about five seconds when `backupOnClose` is enabled. It prevents overlapping backups per game.
 - Phase 6 added polish/reliability/packaging: improved logs viewer, folder-opening buttons, rclone setup help, better Add/Edit validation, friendly empty state, backup history from cloud `versions/`, safe managed-version retention, config corruption recovery, better logging resilience, rclone cancellation handling, Windows publish script, CI publish validation, and documentation cleanup.
 - The MVP stabilization pass changed rclone execution from shell-style quoted command strings to `ProcessStartInfo.ArgumentList`, added safe relative cloud-path validation, blocked restore when the configured game process appears to be running, tail-limited log reads, and made config writes use temporary files plus overwrite moves.
+- The bundled-rclone pass made `RcloneService` prefer `tools/rclone/rclone.exe`, use `%APPDATA%/GameSaveCloudBackup/rclone/rclone.conf` through `RCLONE_CONFIG`, added a Configure Rclone UI action, and made the Windows publish script download and bundle rclone by default.
 - The Phase 6 reliability implementation mismatch fix keeps the docs aligned with the actual source, blocks both manual restore and startup restore when the configured game process is running, shows the message "Please close the game before restoring.", renames invalid `config.json` files to `config.corrupt.TIMESTAMP.json`, creates a clean replacement config, and makes shutdown cancel pending auto-backup/close-backup delays without starting a final close backup after monitoring stops.
 
 ## MVP completion status
 
-MVP is complete for early users if rclone is user-installed and configured.
+MVP is complete for early users with bundled rclone in published builds; local development can still use PATH rclone as a fallback.
 
 Completion checklist:
 
@@ -56,7 +57,7 @@ Completion checklist:
 
 ## Open questions / next work
 
-- Should rclone be bundled, downloaded, or remain user-provided? Current assumption: user-provided rclone in PATH.
+- Should bundled rclone use a pinned version for releases instead of the default `current` download?
 - How should game process detection handle launchers that spawn another process? Current guidance says to select the actual game executable when possible; likely next step is an optional process-name override.
 - Should restore support choosing an older versioned backup, not only `latest/`?
 - How should conflicts be displayed when local and cloud metadata disagree?

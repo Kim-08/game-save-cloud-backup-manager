@@ -7,6 +7,8 @@ namespace GameSaveCloudBackup.Services;
 
 public sealed class RcloneService
 {
+    private const string AppDataFolderName = "GameSaveCloudBackup";
+
     private static readonly Regex SensitiveArgumentPattern = new(
         "(?i)(--(?:password|pass|token|secret|client-secret|drive-client-secret|s3-secret-access-key)(?:=|\\s+))([^\\s\"]+|\"[^\"]*\")",
         RegexOptions.Compiled);
@@ -17,6 +19,17 @@ public sealed class RcloneService
     {
         _loggingService = loggingService;
     }
+
+    public string RcloneExecutablePath => ResolveRcloneExecutablePath();
+
+    public bool IsUsingBundledRclone => File.Exists(GetBundledRcloneExecutablePath());
+
+    public string RcloneConfigDirectory => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        AppDataFolderName,
+        "rclone");
+
+    public string RcloneConfigPath => Path.Combine(RcloneConfigDirectory, "rclone.conf");
 
     public async Task<bool> CheckRcloneInstalled(CancellationToken cancellationToken = default)
     {
@@ -111,6 +124,30 @@ public sealed class RcloneService
         return await RunRcloneCommandAsync(["purge", remotePath], cancellationToken);
     }
 
+    public bool OpenRcloneConfig()
+    {
+        Directory.CreateDirectory(RcloneConfigDirectory);
+
+        var executablePath = RcloneExecutablePath;
+        if (!File.Exists(executablePath) && !string.Equals(executablePath, "rclone", StringComparison.OrdinalIgnoreCase))
+        {
+            _loggingService.Error($"Unable to open rclone config because executable was not found: {executablePath}");
+            return false;
+        }
+
+        var command = $"\"{executablePath}\" config --config \"{RcloneConfigPath}\"";
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "cmd.exe",
+            Arguments = $"/k \"{command}\"",
+            UseShellExecute = true,
+            WorkingDirectory = AppContext.BaseDirectory
+        });
+
+        _loggingService.Info($"Opened rclone config using config file: {RcloneConfigPath}");
+        return true;
+    }
+
     public async Task<RcloneCommandResult> RunRcloneCommandAsync(
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken = default)
@@ -129,11 +166,13 @@ public sealed class RcloneService
 
         try
         {
+            Directory.CreateDirectory(RcloneConfigDirectory);
+
             using var process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = "rclone",
+                    FileName = RcloneExecutablePath,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -141,6 +180,8 @@ public sealed class RcloneService
                 },
                 EnableRaisingEvents = true
             };
+
+            process.StartInfo.Environment["RCLONE_CONFIG"] = RcloneConfigPath;
 
             foreach (var argument in arguments)
             {
@@ -213,7 +254,7 @@ public sealed class RcloneService
                 safeArguments,
                 -1,
                 string.Empty,
-                "rclone was not found. Install rclone and make sure it is available in PATH.",
+                "rclone was not found. Bundle rclone with the app or install rclone and make sure it is available in PATH.",
                 stopwatch.Elapsed);
             _loggingService.Error("rclone command failed: rclone executable not found", ex);
             return result;
@@ -280,6 +321,17 @@ public sealed class RcloneService
         return string.IsNullOrWhiteSpace(path)
             ? string.Empty
             : path.Trim().Trim('/', '\\').Replace('\\', '/');
+    }
+
+    private static string ResolveRcloneExecutablePath()
+    {
+        var bundledPath = GetBundledRcloneExecutablePath();
+        return File.Exists(bundledPath) ? bundledPath : "rclone";
+    }
+
+    private static string GetBundledRcloneExecutablePath()
+    {
+        return Path.Combine(AppContext.BaseDirectory, "tools", "rclone", "rclone.exe");
     }
 
     private static string FormatArgumentsForLog(IEnumerable<string> arguments)

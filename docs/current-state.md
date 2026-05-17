@@ -9,8 +9,9 @@
 - Config writes use a temporary file and overwrite move to reduce partial-write risk.
 - Logs are stored at `%LOCALAPPDATA%/GameSaveCloudBackup/Logs/app.log`.
 - The UI includes a scrollable logs viewer plus Refresh Logs, Open Logs Folder, and Open Config Folder buttons; log reads are tail-limited so large logs are less likely to freeze the UI.
-- Rclone availability is checked on startup using `rclone version`.
-- Rclone remotes are listed with `rclone listremotes`, and the UI includes rclone setup help.
+- Rclone availability is checked on startup using the bundled `tools/rclone/rclone.exe` first, with PATH fallback.
+- Rclone remotes are listed with `rclone listremotes`, and the UI includes Configure Rclone, Refresh Rclone, and setup help actions.
+- Rclone config is stored in `%APPDATA%/GameSaveCloudBackup/rclone/rclone.conf` through `RCLONE_CONFIG`, keeping app remotes separate from any user-level rclone config.
 - Each game row includes Running / Not Running monitor status, Auto Backup enabled state, interval, version retention count, backup-running state, Last Auto Backup, Last Backup, Backup Now, Restore, History, and Open Save Folder.
 - The Add/Edit Game screen validates game name, EXE/launcher path, save folder, rclone remote name, safe relative cloud folder, auto-backup interval, startup restore prompt, backup-on-close setting, and max versioned backups; it also explains that choosing the actual game executable is more reliable than selecting a launcher executable.
 - The game list shows a friendly empty state before games are added.
@@ -24,9 +25,9 @@
 - Automatic backup calls `BackupService.BackupNowAsync(game, "auto")`.
 - Final close backup calls `BackupService.BackupNowAsync(game, "close")` with the close-backup cancellation token.
 - Per-game overlap protection prevents simultaneous backups/restores for the same game, and app shutdown cancels pending auto-backup and close-backup delays before they can start new close backups.
-- Rclone command wrapper uses `ProcessStartInfo.ArgumentList` instead of shell-style command strings, redacts sensitive CLI arguments in logs, handles cancellation by killing the rclone process tree, and returns friendly failure results.
+- Rclone command wrapper uses `ProcessStartInfo.ArgumentList` instead of shell-style command strings, prefers bundled rclone, sets an app-owned `RCLONE_CONFIG`, redacts sensitive CLI arguments in logs, handles cancellation by killing the rclone process tree, and returns friendly failure results.
 - The app does not store rclone credentials or cloud provider credentials.
 - GitHub Actions build workflow exists for Windows and includes publish validation.
-- Windows publish script exists at `scripts/publish-windows.ps1`.
-- Known limitations: no installer/MSIX yet, no bundled rclone, no tray/start-minimized mode, and launcher child-process matching is still basic.
+- Windows publish script exists at `scripts/publish-windows.ps1` and bundles rclone into `tools/rclone/rclone.exe` by default.
+- Known limitations: no installer/MSIX yet, no tray/start-minimized mode, and launcher child-process matching is still basic.
 - Next recommended step: post-MVP release hardening, installer/distribution, launcher process override, and restore conflict UX.
